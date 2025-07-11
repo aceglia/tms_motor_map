@@ -1,0 +1,7 @@
+{
+    "brainsight_adress": "192.168.1.100",
+    "brainsight_port": "60000",
+    "signal_directory": "D:/Documents/Signal8/test_rt",
+    "targets_config": "D:\\Documents\\Programmation\\nerve_transfer_app\\app\\target_config.json",
+    "incremental_target": true
+}

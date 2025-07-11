@@ -1,0 +1,70 @@
+'SampleBeep.sgs|Signal script to play a beep at the start of each frame
+
+'The script is a 'work in progress' and is offered without guarantees.
+'You must test it to see whether it is suitable for your application.
+
+
+var data%;
+var frameCount% := 0;
+var sFlag%;
+var mTime;
+var frame%;
+var started% := 0;
+var duplicate%;
+var file_name$;
+var success% := 1;
+
+'Set up toolbar
+ToolbarSet(2, "Export to file", Start%);
+ToolbarSet(1, "Quit");				
+Toolbar("Export to file",1023);
+
+ExportChanFormat(0,1,1,1);
+ExportTextFormat(6,8,0,"\"","\t",1,0);
+
+'Start sampling
+Func Start%()
+data% := SampleHandle(0);
+duplicate% := WindowDuplicate();
+View(duplicate%);
+file_name$ := FileName$(3) + FileName$(4);
+WindowVisible(0);
+FrontView(data%);
+'View(data%);
+frameCount% := FrameCount();
+ToolbarSet(0,"Idle",Idle%);		'Sey Idle routine to monitor data
+ToolbarEnable(2, 0);
+return 1;
+end;
+
+'Idle routine to monitor when sweep is taking place and "beep"
+Func Idle%()
+if ViewKind(duplicate%) = -2 then
+    FileExportAs( "_data_tmp\\"  + file_name$ + ".aborted" + ".txt" ,1,1);
+    FileClose();
+    Halt;
+endif;
+
+View(duplicate%);
+if frameCount% <> FrameCount() then	
+    started% := 1;
+    frameCount% := FrameCount();
+    frame% := Frame(FrameCount());
+    ExportChanList(-1);
+    ExportFrameList(frameCount%);
+    success% := FileExportAs( "_data_tmp\\"  + file_name$  + ".data_frame_" + Str$(frameCount%) + ".txt" ,1,1);
+    printlog(success%);
+    if success% <> 0 then
+        Message("ERROR|Not able to save data. Verify if the path exists.");
+        Halt;
+    endif;
+endif;
+if started% = 1 then
+   if SampleStatus() = -1 then 
+        FileExportAs( "_data_tmp\\"  + file_name$  + ".finished" + ".txt" ,1,1);
+        FileClose();
+        Halt;
+    endif;
+endif;
+return 1;
+end;
