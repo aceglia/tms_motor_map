@@ -12,6 +12,7 @@ import time
 import socket
 import json
 import uuid
+
 record_separator_character = b"\x1e"
 
 

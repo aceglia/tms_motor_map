@@ -24,7 +24,8 @@ from PyQt5.QtWidgets import (
     QRadioButton,
 )
 import numpy as np
-#from app.packet_wrapper import BrainsightWrapper
+
+# from app.packet_wrapper import BrainsightWrapper
 from packet_wrapper import BrainsightWrapper
 
 
@@ -118,9 +119,10 @@ class App(QMainWindow):
         self.trial_finished = False
         self.target = None
         self.timer = QtCore.QTimer()
+        self.brainsight = None
         self.timer.setInterval(50)
         self.timer.timeout.connect(self.exception_handler)
-        self.timer.start() 
+        self.timer.start()
 
     def exception_handler(self):
         try:
@@ -201,6 +203,7 @@ class App(QMainWindow):
             config = json.load(f)
         self.config_file_name = file_name
         self._from_dict(config)
+        self._set_save_directory()
 
     def _save_configuration(self):
         if self.config_file_name is None:
@@ -265,11 +268,13 @@ class App(QMainWindow):
 
     def _check_new_file(self):
         self._set_save_directory()
-        
+
         dir_to_check = os.path.join(self.save_directory_base, "_data_tmp")
 
         def list_dir(dir_to_check):
-            return [file for file in os.listdir(dir_to_check) if "_tmp" not in file]
+            if os.path.exists(dir_to_check):
+                return [file for file in os.listdir(dir_to_check) if "_tmp" not in file]
+            return []
 
         seen_files = set(list_dir(dir_to_check))
 
@@ -402,21 +407,23 @@ class App(QMainWindow):
         self._new_file_thread = threading.Thread(target=self._check_new_file, daemon=True)
         self._new_file_thread.start()
 
-        self.brainsight = BrainsightWrapper(
-            self.brainsight_adress_input.text(), self.brainsight_port_input.text(), timeout=1, logbox=self.log_queue
-        )
-        self.sample_event = self.brainsight.sample_event
+        if self.brainsight is None:
+            self.brainsight = BrainsightWrapper(
+                self.brainsight_adress_input.text(), self.brainsight_port_input.text(), timeout=1, logbox=self.log_queue
+            )
+            self.sample_event = self.brainsight.sample_event
 
         if not self.brainsight.is_connected():
             try:
                 self.brainsight.connect()
-                self.print_log(f"CONNECTION: Connected to BrainSight at {self.brainsight_adress_input.text()}:{self.brainsight_port_input.text()}")
+                self.brainsight.start()
+                self.print_log(
+                    f"CONNECTION: Connected to BrainSight at {self.brainsight_adress_input.text()}:{self.brainsight_port_input.text()}"
+                )
             except Exception as e:
                 self.print_log(f"CONNECTION: Error connecting to BrainSight - {e}")
                 self.stop()
                 return
-            
-        self.brainsight.start()
 
         self.load_targets_config()
 
@@ -429,7 +436,7 @@ class App(QMainWindow):
         self.is_running = True
 
         self.runing_thread = threading.Thread(target=self._run_thread, daemon=True).start()
-        #self._run_thread()
+        # self._run_thread()
 
     def _save_final_files(self, stoped=False):
         replace_by = "_stoped" if stoped else ""
@@ -444,7 +451,7 @@ class App(QMainWindow):
         self.print_log(f"TRIAL: Data saved in {self.save_directory_base}")
 
     def add_data_to_files(self, last_signal_data, sample):
-        signal_dict = self._read_signal_file(os.path.join(self.save_directory_base, "_data_tmp", last_signal_data))
+        signal_dict = self.read_signal_file(os.path.join(self.save_directory_base, "_data_tmp", last_signal_data))
         self.txt_file_name = f"_tmp_synch_trial_{signal_dict['file_name'].split('.')[0]}.txt"
         self.pkl_file_name = f"_tmp_data_trial_{signal_dict['file_name'].split('.')[0]}.pkl"
         with open(os.path.join(self.save_directory_base, "_data_tmp", self.txt_file_name), "a") as f:
@@ -469,12 +476,12 @@ class App(QMainWindow):
                     reader = csv.reader(file, delimiter="\t")
                     headers_ok = False
                     for row in reader:
-                        if 's' in row:
-                             headers = row
-                             headers_ok = True
+                        if "s" in row:
+                            headers = row
+                            headers_ok = True
                         elif headers_ok:
                             rows.append(row)
-                
+
                 file_info = file_name.split(os.sep)[-1]
                 name = file_info.split(".")[0]
                 frame = f'Frame {int(file_info.split("_")[-1].split(".")[0])}'
@@ -513,7 +520,6 @@ class App(QMainWindow):
         self.runing_thread = None
         if not final:
             self.run()
-
 
     def quit(self):
         self.timer.stop()

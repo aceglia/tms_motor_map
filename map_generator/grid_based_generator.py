@@ -1,5 +1,6 @@
 from map_generator.map_generator import MapGenerator
 import os
+
 # import matplotlib.pyplot as plt
 
 # from plot_utils import plot_2d_points, plot_single_map, plot_heatmap
@@ -91,18 +92,18 @@ class GridBasedGenerator(MapGenerator):
 #             plot_single_map(x_list[j], y_list[j], z_list[j], ax[i, j], 50, x_cog[j], y_cog[j], area[j], volume[j])
 #         _ = [a.set_aspect("equal", adjustable="box") for a in ax.flatten()]
 #     plt.show()
-    # position = mapp_gen.position
-    # signal_data = [d[2000:2400, 1:, :] for d in mapp_gen.signal_data]
-    # baseline = [d[1900:1990, 1:, :] for d in mapp_gen.signal_data]
+# position = mapp_gen.position
+# signal_data = [d[2000:2400, 1:, :] for d in mapp_gen.signal_data]
+# baseline = [d[1900:1990, 1:, :] for d in mapp_gen.signal_data]
 
-    # trans = [p[:, 3, :3] for p in position]
-    # trans.append(np.concatenate(trans, axis=0))
-    # signal_data.append(np.concatenate(signal_data, axis=-1))
-    # baseline.append(np.concatenate(baseline, axis=-1))
-    # planes = [MapGenerator.get_plane_from_points(p) for p in trans]
-    # # _ = [mapp_gen.plot_3D_points(t, plane = planes[idx], show=True) for idx,  t in enumerate(trans)]
+# trans = [p[:, 3, :3] for p in position]
+# trans.append(np.concatenate(trans, axis=0))
+# signal_data.append(np.concatenate(signal_data, axis=-1))
+# baseline.append(np.concatenate(baseline, axis=-1))
+# planes = [MapGenerator.get_plane_from_points(p) for p in trans]
+# # _ = [mapp_gen.plot_3D_points(t, plane = planes[idx], show=True) for idx,  t in enumerate(trans)]
 
-    # points = [mapp_gen.get_local_projected_points(trans[idx], planes[idx]) for idx in range(len(trans))]
-    # _ = [mapp_gen.generate_map(signal_data[idx], baseline[idx], points[idx]) for idx in range(len(trans))]
+# points = [mapp_gen.get_local_projected_points(trans[idx], planes[idx]) for idx in range(len(trans))]
+# _ = [mapp_gen.generate_map(signal_data[idx], baseline[idx], points[idx]) for idx in range(len(trans))]
 
-    # plt.show()
+# plt.show()

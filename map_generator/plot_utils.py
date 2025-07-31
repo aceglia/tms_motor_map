@@ -122,9 +122,9 @@ def plot_single_map(x, y, zgf, ax=None, n_point_grid=50, x_cog=None, y_cog=None,
     xi, yi = np.meshgrid(xi, yi)
 
     ax.contourf(xi, yi, zgf, n_point_grid, cmap="jet")
-    ax.scatter(x, y, c="k", s=5, alpha=0.3, marker="o")
-    if x_cog is not None and y_cog is not None:
-        ax.scatter(x_cog, y_cog, c="k", s=150, marker="x")
+    ax.scatter(x, y, c="k", s=4, alpha=0.1, marker="o")
+    # if x_cog is not None and y_cog is not None:
+    #     ax.scatter(x_cog, y_cog, c="k", s=150, marker="x")
     # ax.text(
     #     0.05,
     #     0.95,
@@ -149,5 +149,5 @@ def plot_2d_points(points, ax=None, color="k", colorized_points=None):
     if colorized_points is not None:
         idxs, colors = colorized_points
         _ = [ax.scatter(points[idxs[i], 0], points[idxs[i], 1], color=colors[i]) for i in range(len(idxs))]
-
+    ax.set_aspect("equal")
     return ax

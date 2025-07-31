@@ -30,7 +30,7 @@ class Sample:
         if self.coordinate_system != COORDINATE_SYSTEM.BRAINSIGHT.value:
             self.print_log("WARNING: Sample coordinate system is not Brainsight.")
         return self
-    
+
     def print_log(self, message):
         if self.log_box is not None:
             self.log_box.put_nowait(message)

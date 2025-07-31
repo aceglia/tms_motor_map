@@ -1,3 +1,4 @@
+import stat
 from biosiglive.file_io.save_and_load import _read_all_lines, dic_merger
 import numpy as np
 from pygridfit import GridFit, TiledGridFit
@@ -33,6 +34,21 @@ class MapGenerator:
         baseline = signal_data[baseline_frames[0] : baseline_frames[1], :, :]
         return baseline, mep_data
 
+    @staticmethod
+    def rolling_rms(x, N):
+        xc = np.cumsum(abs(x)**2)
+        return np.sqrt((xc[N:] - xc[:-N]) / N)
+
+    def process_mep(self, peak_to_peak, baseline, mep_threeshold=25):
+        for i in range(peak_to_peak.shape[0]):
+            mep_values = peak_to_peak[i, peak_to_peak[i, :] * 1e6 > mep_threeshold]
+            mep_values_to_exclude = mep_values.mean() + 3.5 * mep_values.std()
+            peak_to_peak[i, peak_to_peak[i, :] > mep_values_to_exclude] = np.nan
+            # rms_baseline = [self.rolling_rms(baseline[:, i, j], 10) for j in range(baseline.shape[2])]
+            # rms_baseline_mean = [np.nanmean(rms_baseline[j]) for j in range(len(rms_baseline))]
+            # rms_baseline_std = [np.nanstd(rms_baseline[j]) for j in range(len(rms_baseline))]
+        return peak_to_peak
+
     def generate_single_map(
         self,
         mep_data,
@@ -41,51 +57,21 @@ class MapGenerator:
         n_point_grid,
         tiled=True,
         p2p=None,
-        idx_limit_map=None,
-        exclude_outliers_mep=True,
     ):
-        peak_to_peak = np.ptp(mep_data, axis=0)
-        if p2p is not None:
-            peak_to_peak = p2p
-        idx_excluded = [
-            np.array([]) for i in range(mep_data.shape[1])
-        ]  # exclude_signal_data(peak_to_peak, baseline, self.n_map)
+        peak_to_peak = self.process_mep(np.ptp(mep_data, axis=0), baseline, mep_threeshold) if p2p is None else p2p
 
-        mep_threeshold = 40
-        # x_min, x_max = -30, 30
-        # y_min, y_max = -30, 30
+        mep_threeshold = 25
         x_list, y_list, z_list = [], [], []
         x_cog_list, y_cog_list = [], []
         area_list = []
         volume_list = []
         for i in range(peak_to_peak.shape[0]):
-            if p2p is None:
-                mep_values = peak_to_peak[i, peak_to_peak[i, :] * 1e6 > mep_threeshold]
-                mep_values_to_exclude = mep_values.mean() + 3.5 * mep_values.std()
-                peak_to_peak[i, peak_to_peak[i, :] > mep_values_to_exclude] = 0
-                peak_to_peak[i, peak_to_peak[i, :] * 1e6 < mep_values_to_exclude] = 0
-
             z = peak_to_peak[i, :]
+            
             x, y = points[:, 0], points[:, 1]
-            x_cog, y_cog = get_cog(x, y, z)
-
+            z[np.isnan(x) | np.isnan(y)] = np.nan
             x_min, x_max = np.nanmin(x), np.nanmax(x)
             y_min, y_max = np.nanmin(y), np.nanmax(y)
-
-            if idx_limit_map is not None:
-                x_min, x_max = np.nanmin(x[list(idx_limit_map)]), np.nanmax(x[list(idx_limit_map)])
-                y_min, y_max = np.nanmin(y[list(idx_limit_map)]), np.nanmax(y[list(idx_limit_map)])
-                idx_outside = np.where((x < x_min) | (x > x_max) | (y < y_min) | (y > y_max))
-                x = np.delete(x, idx_outside)
-                y = np.delete(y, idx_outside)
-                z = np.delete(z, idx_outside)
-            if exclude_outliers_mep:
-                z = exclude_outliers(z[None, :], 3.5)[0, :]
-
-            if idx_excluded[i].size > 0:
-                z[idx_excluded[i]] = np.nan
-                x[idx_excluded[i]] = np.nan
-                y[idx_excluded[i]] = np.nan
 
             xi_fit = np.linspace(x_min, x_max, n_point_grid)
             yi_fit = np.linspace(y_min, y_max, n_point_grid)
@@ -106,16 +92,19 @@ class MapGenerator:
                     regularizer="gradient",
                     solver="normal",
                     tilesize=120,
-                    overlap=0.25,
+                    overlap=0.15,
                 ).fit()
             else:
                 gf = GridFit(x, y, normalized_z, xi_fit, yi_fit).fit()
 
-            zgf = gf.zgrid
-            area, volume = get_area_and_volume(x, y, z)
+            zgf = np.clip(gf.zgrid, a_min=0, a_max=gf.zgrid.max())
+            xgf = gf.xgrid
+            ygf = gf.ygrid
+            area, volume = get_area_and_volume(xgf.flatten(), ygf.flatten(), zgf.flatten())
             x_list.append(x)
             y_list.append(y)
             z_list.append(zgf)
+            x_cog, y_cog = get_cog(xgf.flatten(), ygf.flatten(), zgf.flatten())
             x_cog_list.append(x_cog)
             y_cog_list.append(y_cog)
             area_list.append(area)
@@ -166,6 +155,7 @@ class MapGenerator:
     #     return x_list_global, y_list_global, z_list_global
 
     def get_local_projected_points(self, points, idx_axis_1=None):
+
         (x, y, z), com = get_plane_from_points(points)
         # create plane coordinates system
         local = np.array([to_plane_coordinates(p, (0, 0, 0), x, y, z) for p in points - com])
@@ -214,6 +204,10 @@ class MapGenerator:
         self.brainsight_data = [new_dict["brainsight_data"] for new_dict in self.all_data]
         self.position = [brainsight_data["position"].reshape(4, 4, -1).T for brainsight_data in self.brainsight_data]
         self.signal_data = [new_dict["signal_data"]["data"] for new_dict in self.all_data]
+        # center signal data
+        self.signal_data = [
+            signal_data - np.mean(signal_data, axis=0, keepdims=True) for signal_data in self.signal_data
+        ]
         self.target_position = [
             brainsight_data["target_position"].reshape(4, 4, -1).T for brainsight_data in self.brainsight_data
         ]

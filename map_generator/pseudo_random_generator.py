@@ -1,5 +1,6 @@
 from map_generator.map_generator import MapGenerator
 import os
+
 # import matplotlib.pyplot as plt
 
 # from plot_utils import plot_2d_points, plot_map, plot_plane, plot_single_map
@@ -12,7 +13,6 @@ import os
 #     rotate_points,
 #     to_plane_coordinates,
 # )
-
 
 
 class PseudoRandomGenerator(MapGenerator):

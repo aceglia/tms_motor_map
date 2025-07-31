@@ -1,14 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # create a rectangular 2D point cloud with points spaced of 10 mm appart and of size 60x60 mm
     x = np.arange(0, 60, 10).astype(float)
     y = np.arange(0, 60, 10).astype(float)
     # add noise in the x and y coordinates
     x += np.random.normal(0, 1, x.shape)
     y += np.random.normal(0, 1, y.shape)
-    
+
     xx, yy = np.meshgrid(x, y)
     z = np.zeros_like(xx).astype(float)
     # add some random noise to the point cloud
@@ -41,10 +41,11 @@ if __name__ == '__main__':
         ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
         ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
         ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
     # plot 3d
 
     fig = plt.figure(figsize=(10, 7))
-    ax = fig.add_subplot(111, projection='3d')    # plot the point cloud using matplotlib
-    ax.scatter(xx, yy, z, c='r', marker='o')
+    ax = fig.add_subplot(111, projection="3d")  # plot the point cloud using matplotlib
+    ax.scatter(xx, yy, z, c="r", marker="o")
     set_axes_equal(ax)
     plt.show()

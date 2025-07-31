@@ -1,3 +1,4 @@
+from csv import excel
 import os
 import numpy as np
 from scipy.spatial import ConvexHull
@@ -58,11 +59,11 @@ def rotate_points(points, idx_axis_1=(0, -6), additional_rot=0, ref_axis=[1, 0])
     ref_axis = np.array(ref_axis)
     # if self.angle is None:
     angle, _ = angle_between_vectors_cross(axis_1, ref_axis)
-    rotated_local = apply_rotation(angle, points)
+    rotated_local = apply_rotation(angle, points.copy())
     axis_1 = rotated_local[idx_axis_1[0], :] - rotated_local[idx_axis_1[1], :]
     angle_bis, _ = angle_between_vectors_cross(axis_1, ref_axis)
-    if abs(angle_bis) > abs(angle):
-        rotated_local = apply_rotation(-angle, points)
+    if abs(angle_bis) > 0.001:
+        rotated_local = apply_rotation(-angle, points.copy())
 
     # check if same direction
     rotated_local_x = rotated_local[idx_axis_1[0], :] - rotated_local[idx_axis_1[1], :]
@@ -135,6 +136,7 @@ def exclude_signal_data(p2p, baseline, n_map):
 
 
 def get_random_points(list_nb_points, nb_total_points):
+    random.seed(42)
     initial_list = np.arange(0, nb_total_points)
     random.shuffle(initial_list[4:])
     return [initial_list[0 : list_nb_points[i]] for i in range(len(list_nb_points))]
@@ -148,8 +150,10 @@ def get_mep_from_excel(dir_path, trials, base_name, channel_names=None, exclude_
         data_mat = []
         frames = []
         for channel in channel_names:
-            # excel_names = f'test_mapping_HB_00{trial}_{channel}_MatLabResults.xlsx'
-            excel_names = f"{base_name}{trial}_{channel}_MatLabResults.xlsx"
+            excel_names = f"{base_name}{trial}_{channel.lower()}_MatLabResults.xlsx"
+            if not os.path.exists(os.path.join(dir_path, excel_names)):
+                excel_names = f"{base_name}{trial}_{channel.upper()}_MatLabResults.xls"
+
             if os.path.exists(os.path.join(dir_path, excel_names)):
                 data_tmp = pd.read_excel(os.path.join(dir_path, excel_names), sheet_name=1)
                 headers = data_tmp.values[18]
@@ -191,11 +195,13 @@ def exclude_outliers(data, threshold=3.5):
         mean = data[i][data[i] != 0].mean()
         std = data[i][data[i] != 0].std()
         idx_excluded = np.where(data[i] > mean + threshold * std)[0]
-        data[i][idx_excluded] = 0
+        data[i][idx_excluded] = np.nan
     return data
 
 
 def get_cog(x, y, p2p):
+    if p2p.sum() == 0:
+        return 0, 0
     x_cog = np.sum(x * p2p) / np.sum(p2p)
     y_cog = np.sum(y * p2p) / np.sum(p2p)
     return x_cog, y_cog
@@ -208,13 +214,24 @@ def get_area_and_volume(x, y, z):
     if x.size < 4:
         return 0, 0
     hull_area = ConvexHull(np.array([x, y]).T)
-    area = hull_area.volume / 100
+    area = hull_area.volume
     hull_volume = ConvexHull(np.array([x, y, z]).T)
-    volume = hull_volume.volume / 1000
+    volume = hull_volume.volume
     return area, volume
 
 
-class Participant:
+def check_order(name):
+    import csv
+
+    number = int(name.split("_")[0][-3:])
+    with open("participant_numbers.txt", "r") as f:
+        reader = csv.reader(f, delimiter=",")
+        for row in reader:
+            if int(row[0].split("(")[-1]) == number:
+                return str(row[1].split(")")[0])[2:-1] == "pseudo first"
+
+
+class ParticipantTest:
     def __init__(self, name):
         self.name = name
 
@@ -227,6 +244,7 @@ class Participant:
         }
 
     def return_pkl_file_name(self):
+
         return rf"data_trial_test_mapping_{self.name}007.pkl"
 
     def return_pkl_file_base(self):
@@ -243,6 +261,60 @@ class Participant:
 
     def return_grid_trials(self):
         return ["3", "4", "5", "6"]
+
+    def return_trials(self, pseudo=False):
+        if pseudo:
+            return self.return_pseudo_trial()
+        return self.return_grid_trials()
+
+    def excel_mep(self, pseudo_trial=False):
+        trials = self.return_trials(pseudo_trial)
+
+        mep_data_file, frame_file = get_mep_from_excel(
+            self.return_dir_path(),
+            trials,
+            channel_names=["FDI", "ext_comm", "sup", "tri", "delt_post"],
+            exclude_mep=True,
+            base_name=self.return_excel_file_name(),
+        )
+        return mep_data_file, frame_file
+
+
+class Participant:
+    def __init__(self, name):
+        self.name = name
+        self.pseudo_first = False
+        if not "SCI" in name:
+            self.pseudo_first = check_order(name)
+        self.trials = ["2", "3", "4", "5", "6", "7"]
+
+    def part_dict(self):
+        return {
+            "base_name": "UA",
+            "dir_path": self._return_dir_path(self.name),
+            "pkl_file_name": self._return_pkl_file_name(self.name),
+            "excel_file_name": self._return_excel_file_name(self.name),
+        }
+
+    def return_pkl_file_name(self):
+        return rf"data_trial_{self.name}00{self.return_pseudo_trial()[0]}.pkl"
+
+    def return_pkl_file_base(self):
+        return rf"data_trial_{self.name}00"
+
+    def return_dir_path(self):
+        return rf"D:\Documents\Udem\Postdoctorat\Projet transfert nerveux\data\{self.name}"
+
+    def return_excel_file_name(self):
+        return rf"{self.name}_00"
+
+    def return_pseudo_trial(self):
+        trial = self.trials[-1] if not self.pseudo_first else self.trials[0]
+        return [trial]
+
+    def return_grid_trials(self):
+        trial = self.trials[:-1] if not self.pseudo_first else self.trials[1:]
+        return trial
 
     def return_trials(self, pseudo=False):
         if pseudo:
