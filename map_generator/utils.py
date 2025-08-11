@@ -96,14 +96,20 @@ def project_point_onto_plane(point, plane_point, plane_normal):
     return point - distance * plane_normal
 
 
-def get_plane_from_points(points):
+def get_plane_from_points(points, points_to_center=None):
+    if points_to_center is None:
+        centroid = np.mean(points, axis=0)
+    else:
+        centroid = np.mean(points_to_center, axis=0)
     centroid = np.mean(points, axis=0)
     centered = points - centroid
     _, _, Vt = np.linalg.svd(centered)
 
     normal = Vt[2]
-    x_axis = Vt[0]  # first principal direction
-    y_axis = Vt[1]  # second principal direction
+    first_dir = Vt[0]  # first principal direction 
+    y_axis = np.cross(normal, first_dir)
+    cross_product = np.cross(normal, y_axis)
+    x_axis = -cross_product if np.linalg.det([cross_product, y_axis, normal]) < 0 else cross_product
     z_axis = normal  # third is the normal
 
     return (x_axis, y_axis, z_axis), centroid
@@ -159,13 +165,13 @@ def get_mep_from_excel(dir_path, trials, base_name, channel_names=None, exclude_
                 headers = data_tmp.values[18]
                 mep_found_idx = headers.tolist().index("Found")
                 data_glob = data_tmp.values[21:-1]
-                frame_idx = 0
-                mep_idx = 1
+                frame_idx = headers.tolist().index("Frame")
+                mep_idx = headers.tolist().index("Pk to Pk")
                 frames_tmp = data_glob[:, frame_idx]
                 mep_tmp = data_glob[:, mep_idx].astype(float)
                 is_mep = data_glob[:, mep_found_idx] > 0
                 mep_tmp[is_mep == False] = 0
-                mep_tmp = mep_tmp if not reverse else mep_tmp[::-1]
+                # mep_tmp = mep_tmp if not reverse else mep_tmp[::-1]
                 data_mat.append(mep_tmp)
                 frames.append(frames_tmp)
                 nb_files += 1

@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import pandas as pd
-from map_generator.plot_utils import plot_2d_points, plot_single_map
+from map_generator.plot_utils import plot_2d_points, plot_3D_points, plot_single_map
 from map_generator.utils import (
     Participant,
     get_random_points,
@@ -14,9 +14,9 @@ from scipy.stats import pearsonr
 import numpy as np
 
 
-def get_data_from_pseudo(map_gen, mep_data=None):
-    nb_stim_list = [24, 64, 94, 124, 154, map_gen.signal_data[0].shape[-1]]
-    rdm_points = get_random_points(nb_stim_list, nb_total_points=map_gen.signal_data[0].shape[-1] - 4)
+def get_data_from_pseudo(map_gen, mep_data=None, frame_for_file=None):
+    nb_stim_list = [44, 64, 94, 124, 154, map_gen.signal_data[0].shape[-1]]
+    rdm_points = get_random_points(nb_stim_list, nb_total_points=map_gen.signal_data[0].shape[-1])
     target_names = map_gen.brainsight_data[0]["target_name"]
     target_names_roll = np.roll(target_names, 4)
     signal_data_roll = np.roll(map_gen.signal_data[0], 4, axis=-1)
@@ -26,6 +26,7 @@ def get_data_from_pseudo(map_gen, mep_data=None):
     position_mat = [position_roll[rdm_points[i]] for i in range(len(rdm_points))]
     target_position_mat = [target_position[rdm_points[i]] for i in range(len(rdm_points))]
     if p2p_from_file and mep_data is not None:
+        mep_data = check_frame_numbers(map_gen, mep_data, frame_for_file)
         mep_data_file_roll = np.roll(mep_data[0], 4, axis=-1)
         mep_data_mat = [mep_data_file_roll[..., rdm_points[i]] for i in range(len(rdm_points))]
     else:
@@ -34,25 +35,34 @@ def get_data_from_pseudo(map_gen, mep_data=None):
     return target_names_roll, position_mat, signal_mat, mep_data_mat, target_position_mat
 
 
-def get_data_from_grid(map_gen, trials, mep_data=None):
+def get_data_from_grid(map_gen, trials, mep_data=None, frame_for_file=None):
     to_concat = list(range(1, len(trials) + 1))
     target_names = map_gen.brainsight_data[0]["target_name"]
     idx = min([si.shape[0] for si in map_gen.signal_data])
     signal_mat = [np.concatenate(([si[:idx, ...] for si in map_gen.signal_data[:c]]), axis=-1) for c in to_concat]
     position_mat = [np.vstack(map_gen.position[:c]) for c in to_concat]
     target_position_mat = [np.vstack(map_gen.target_position[:c]) for c in to_concat]
-
     if p2p_from_file and mep_data is not None:
+        mep_data = check_frame_numbers(map_gen, mep_data, frame_for_file)
         mep_data_mat = [np.hstack([si for si in mep_data[:c]]) for c in to_concat]
     else:
         mep_data_mat = [None for _ in range(len(signal_mat))]
     return target_names, position_mat, signal_mat, mep_data_mat, target_position_mat
 
+def check_frame_numbers(map_gen, mep_data, frame_from_file):
+    ordered_mep_data = []
+    for i in range(len(frame_from_file)):
+        frame_from_pkl = [int(frame.split(' ')[1]) for frame in map_gen.all_data[i]['signal_data']["frame_number"]]
+        idx_list = [np.where(frame_from_pkl[j] == frame_from_file[i][0])[0][0] for j in range(len(frame_from_pkl))]
+        frame_from_file[i][0][idx_list]
+        ordered_mep_data.append(mep_data[i][:, idx_list])
+    return ordered_mep_data
 
-def get_data(map_gen, mep_data, trial_list=None, pseudo=False):
+
+def get_data(map_gen, mep_data, trial_list=None, pseudo=False, frame_from_file=None):
     if pseudo:
-        return get_data_from_pseudo(map_gen, mep_data)
-    return get_data_from_grid(map_gen, trial_list, mep_data)
+        return get_data_from_pseudo(map_gen, mep_data, frame_from_file)
+    return get_data_from_grid(map_gen, trial_list, mep_data, frame_from_file)
 
 
 def compute_maps(participant, pseudo=False, data_rate=2148, p2p_from_file=False):
@@ -64,14 +74,14 @@ def compute_maps(participant, pseudo=False, data_rate=2148, p2p_from_file=False)
 
     mep_data, frame_file = participant.excel_mep(pseudo_trial=pseudo)
 
-    if mep_data is not None:
-        mep_data = [mep_data[i][:, -map_gen.signal_data[0].shape[-1] :] for i in range(len(map_gen.signal_data))]
-    else:
-        if p2p_from_file:
-            print("WARNING: Peak to peak ask from file but none was found.")
+    # if mep_data is not None:
+    #     mep_data = [mep_data[i][:, -map_gen.signal_data[0].shape[-1] :] for i in range(len(map_gen.signal_data))]
+    # else:
+    #     if p2p_from_file:
+    #         print("WARNING: Peak to peak ask from file but none was found.")
 
     target_names, position_mat, signal_mat, mep_data_mat, target_position = get_data(
-        map_gen, mep_data, participant.return_grid_trials(), pseudo
+        map_gen, mep_data, participant.return_grid_trials(), pseudo, frame_file
     )
 
     grid_name = map_gen.brainsight_data[0]["target_name"][0][0].split(" ")[0]
@@ -87,20 +97,29 @@ def compute_maps(participant, pseudo=False, data_rate=2148, p2p_from_file=False)
     )
     colors = ["r", "g", "b", "c"]
     maps_characteristics = []
-    fig, ax = plt.subplots(len(signal_mat), 2, num="points projection_" + name, sharey=True, sharex=True)
+    # fig, ax = plt.subplots(len(signal_mat), 2, num="points projection_" + name, sharey=True, sharex=True)
     for i in range(len(signal_mat)):
         points = position_mat[i][:, 3, :3]
-        # remove points where position == (0,0,0)
         idx_zero = np.where(np.all(points == 0, axis=1))[0]
         if len(idx_zero) > 0:
             points = np.delete(points, idx_zero, axis=0)
             signal_data = np.delete(signal_mat[i], idx_zero, axis=-1)
+            if mep_data_mat[i] is not None:
+                mep_data_tmp = np.delete(mep_data_mat[i], idx_zero, axis=-1)
+            else:
+                mep_data_tmp = None
         else:
             signal_data = signal_mat[i]
-        # if i == 0:
-        (x, y, z), com = get_plane_from_points(points)
-        y = -y if z[0] > 0 else y
-        z = -z if z[0] > 0 else z
+            mep_data_tmp = mep_data_mat[i] if mep_data_mat[i] is not None else None
+        if i == 0:
+            # plot 3d
+            position = target_position[-1][:, 3, :3] if pseudo else target_position[0][:, 3, :3]
+            # (x, y, z), com = get_plane_from_points(position) #, position_mat[-1][:, 3, :3])
+            (x, y, z), com = get_plane_from_points(points) #, position_mat[-1][:, 3, :3])
+            if np.dot(z, [0, 0, 1]) < 0:
+                y = -y
+                z = -z
+
         local = np.array([to_plane_coordinates(p, (0, 0, 0), x, y, z) for p in points - com])
         rotated_points = rotate_points(local[:, :2], idx_axis_1=idx_axis_1, additional_rot=0)
         baseline, mep_data = map_gen._get_baseline_mep(signal_data, stimulation_time=1, windows=([50, 5], [10, 40]))
@@ -111,7 +130,7 @@ def compute_maps(participant, pseudo=False, data_rate=2148, p2p_from_file=False)
             baseline,
             rotated_points,
             50,
-            p2p=mep_data_mat[i],
+            p2p=mep_data_tmp,
             tiled=True,
         )
         maps_characteristics.append(map_characteristics_tmp)
@@ -228,18 +247,20 @@ def add_to_dataframe(maps, data_frame, participant, condition, muscle_list):
 
 
 if __name__ == "__main__":
-    paticipants = list(range(2, 7))
+    paticipants = list(range(2, 14))
     participants = [f"P{p:03d}_TN" for p in paticipants]
     p2p_from_file = True
-    condition = ["pseudo", "grid"]
+    condition = ["grid", "pseudo"]
     muscle_list = ["fdi", "ext_comm", "sup", "tri", "delt_post"]
     data_frame = pd.DataFrame()
     for part_name in participants:
         participant = Participant(part_name)
         for m, name in enumerate(condition):
             maps = compute_maps(participant, pseudo=name == "pseudo", data_rate=2148, p2p_from_file=p2p_from_file)
+            plot_maps(maps, name=name + f' maps participant {part_name}')
             data_frame = add_to_dataframe(maps, data_frame, part_name, name, muscle_list)
             # plot_characteristics(maps, name + '_' + part_name, absolutes=True)
             # plot_maps(maps, name=name + f' maps participant {part_name}')
+        # plt.show()
     data_frame.to_csv("maps_characteristics.csv")
     # plt.show()

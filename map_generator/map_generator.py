@@ -58,9 +58,10 @@ class MapGenerator:
         tiled=True,
         p2p=None,
     ):
+        mep_threeshold = 25
+
         peak_to_peak = self.process_mep(np.ptp(mep_data, axis=0), baseline, mep_threeshold) if p2p is None else p2p
 
-        mep_threeshold = 25
         x_list, y_list, z_list = [], [], []
         x_cog_list, y_cog_list = [], []
         area_list = []
@@ -87,7 +88,7 @@ class MapGenerator:
                     normalized_z,
                     xnodes=xi_fit,
                     ynodes=yi_fit,
-                    smoothness=5,
+                    smoothness=15,
                     interp="triangle",
                     regularizer="gradient",
                     solver="normal",

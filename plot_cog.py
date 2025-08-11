@@ -27,10 +27,10 @@ def plot(df, x, y, hue):
 
 data_frame = pd.read_csv("maps_characteristics.csv")
 
-paticipants = list(range(2, 7))
+paticipants = list(range(2, 11))
 participants = [f"P{p:03d}_TN" for p in paticipants]
 
-grid_data_frame = data_frame.loc[data_frame["condition"] == "pseudo"].loc[data_frame["participant"].isin(participants)]
+grid_data_frame = data_frame.loc[data_frame["condition"] == "grid"].loc[data_frame["participant"].isin(participants)]
 df_cog_x = grid_data_frame[["map_number", "x_cog_error", "muscle", 'participant']]
 df_cog_y = grid_data_frame[["map_number", "y_cog_error", "muscle", 'participant']]
 df_cog_euclid = grid_data_frame[["map_number", "euclid_cog_error", "muscle", 'participant']]
