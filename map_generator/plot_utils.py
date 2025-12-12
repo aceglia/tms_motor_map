@@ -3,46 +3,51 @@ import numpy as np
 
 
 def plot_3D_points(points, plane=None, show=True, ax_3d=None):
-    # fig = plt.figure(figsize=(10, 7))
-    # ax = fig.add_subplot(111, projection='3d')
-    # if plane is not None:
-    #     (x, y, z), com = plane
-    #     # create plane coordinates system
-    #     projected = np.array([self._project_point_onto_plane(p, com, z) for p in points])
-    #     local_projeted = np.array([self._to_plane_coordinates(p_proj, com, x, y) for p_proj in projected])
-    #     rotated_local = self._rotate_points(local_projeted)
-    # create local coordinates system using the points -1 and -6
-    # plt.scatter(local_projeted[:, 0], local_projeted[:, 1], c='r')
-    # plt.scatter(np.mean(local_projeted[:, 0]), np.mean(local_projeted[:, 1]), c='g', marker='x')
-    # bounding box square
-    x_min, x_max = points[:, 0].min(), points[:, 0].max()
-    y_min, y_max = points[:, 1].min(), points[:, 1].max()
-    plt.plot([x_min, x_max, x_max, x_min, x_min], [y_min, y_min, y_max, y_max, y_min], c="k")
-    # ideal square
-    x_min, x_max = -30, 30
-    y_min, y_max = -30, 30
-    # move to points center
-    x_min, x_max = x_min - np.mean(points[:, 0]), x_max - np.mean(points[:, 0])
-    y_min, y_max = y_min - np.mean(points[:, 1]), y_max - np.mean(points[:, 1])
-    plt.plot([x_min, x_max, x_max, x_min, x_min], [y_min, y_min, y_max, y_max, y_min], c="k", linestyle="--")
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(points[:, 0], points[:, 1], points[:, 2])
+    set_axes_equal(ax)
 
-    # ideal points
-    plt.scatter(points[:, 0], points[:, 1], c="k")
-    plt.scatter(points[0, 0], points[0, 1], c="r")
 
-    plt.scatter(points[-1, 0], points[-1, 1], c="g")
-    plt.scatter(points[-6, 0], points[-6, 1], c="b")
-    # plt.scatter(ideal_points[:, 0], ideal_points[:, 1], c='b')
 
-    # make axes equal
-    x_min, x_max = plt.gca().get_xlim()
-    y_min, y_max = plt.gca().get_ylim()
-    plt.xlim(min(x_min, y_min), max(x_max, y_max))
-    plt.ylim(min(x_min, y_min), max(x_max, y_max))
+    # # if plane is not None:
+    # #     (x, y, z), com = plane
+    # #     # create plane coordinates system
+    # #     projected = np.array([self._project_point_onto_plane(p, com, z) for p in points])
+    # #     local_projeted = np.array([self._to_plane_coordinates(p_proj, com, x, y) for p_proj in projected])
+    # #     rotated_local = self._rotate_points(local_projeted)
+    # # create local coordinates system using the points -1 and -6
+    # # plt.scatter(local_projeted[:, 0], local_projeted[:, 1], c='r')
+    # # plt.scatter(np.mean(local_projeted[:, 0]), np.mean(local_projeted[:, 1]), c='g', marker='x')
+    # # bounding box square
+    # x_min, x_max = points[:, 0].min(), points[:, 0].max()
+    # y_min, y_max = points[:, 1].min(), points[:, 1].max()
+    # plt.plot([x_min, x_max, x_max, x_min, x_min], [y_min, y_min, y_max, y_max, y_min], c="k")
+    # # ideal square
+    # x_min, x_max = -30, 30
+    # y_min, y_max = -30, 30
+    # # move to points center
+    # x_min, x_max = x_min - np.mean(points[:, 0]), x_max - np.mean(points[:, 0])
+    # y_min, y_max = y_min - np.mean(points[:, 1]), y_max - np.mean(points[:, 1])
+    # plt.plot([x_min, x_max, x_max, x_min, x_min], [y_min, y_min, y_max, y_max, y_min], c="k", linestyle="--")
 
-    # ax.scatter(points[:, 0], points[:, 1], points[:, 2])
-    # self.set_axes_equal(ax)
-    plt.show()
+    # # ideal points
+    # plt.scatter(points[:, 0], points[:, 1], c="k")
+    # plt.scatter(points[0, 0], points[0, 1], c="r")
+
+    # plt.scatter(points[-1, 0], points[-1, 1], c="g")
+    # plt.scatter(points[-6, 0], points[-6, 1], c="b")
+    # # plt.scatter(ideal_points[:, 0], ideal_points[:, 1], c='b')
+
+    # # make axes equal
+    # x_min, x_max = plt.gca().get_xlim()
+    # y_min, y_max = plt.gca().get_ylim()
+    # plt.xlim(min(x_min, y_min), max(x_max, y_max))
+    # plt.ylim(min(x_min, y_min), max(x_max, y_max))
+
+    # # ax.scatter(points[:, 0], points[:, 1], points[:, 2])
+    # # self.set_axes_equal(ax)
+    # plt.show()
 
     if show:
         plt.show()
@@ -86,9 +91,6 @@ def plot_plane(points, com, normal, fig_name=None):
     zz = (-normal[0] * xx - normal[1] * yy - d) * 1.0 / normal[2]
     ax.plot_wireframe(xx, yy, zz, alpha=0.5, color="k")
     ax.scatter(points[:, 0], points[:, 1], points[:, 2], c="k")
-    colors = ["r", "g", "b", "c"]
-    for i, idx in enumerate([0, 5, -6, -1]):
-        ax.scatter(points[:42, :][idx, 0], points[:42, :][idx, 1], points[:42, :][idx, 2], c=colors[i], s=70)
     set_axes_equal(ax)
 
 
@@ -110,8 +112,8 @@ def plot_heatmap(points, mep, ax=None):
     plt.colorbar(im, ax=ax)
 
 
-def plot_single_map(x, y, zgf, ax=None, n_point_grid=50, x_cog=None, y_cog=None, area=None, volume=None):
-
+def plot_single_map(x, y, zgf, ax=None, n_point_grid=50, x_cog=None, y_cog=None, area=None, volume=None, x_real=None, y_real=None):
+    from scipy.spatial import ConvexHull
     if ax is None:
         fig, ax = plt.subplots()
     x_min, x_max = np.nanmin(x), np.nanmax(x)
@@ -120,11 +122,36 @@ def plot_single_map(x, y, zgf, ax=None, n_point_grid=50, x_cog=None, y_cog=None,
     xi = np.linspace(x_min, x_max, n_point_grid)
     yi = np.linspace(y_min, y_max, n_point_grid)
     xi, yi = np.meshgrid(xi, yi)
+    x_flat = xi.flatten()
+    y_flat = yi.flatten()
+    z_flat = zgf.flatten()
+    x = x_flat[z_flat > np.max(z_flat) * 0.1]
+    y = y_flat[z_flat > np.max(z_flat) * 0.1]
+    if x.size < 4:
+        return 0, 0
+    # hull_area = ConvexHull(np.array([x, y]).T)
+    #plot the points and the convex hull
+    import matplotlib.pyplot as plt
+    # for simplex in hull_area.simplices:
+    #     ax.plot(x[simplex], y[simplex], 'k-')
 
     ax.contourf(xi, yi, zgf, n_point_grid, cmap="jet")
-    ax.scatter(x, y, c="k", s=4, alpha=0.1, marker="o")
-    # if x_cog is not None and y_cog is not None:
-    #     ax.scatter(x_cog, y_cog, c="k", s=150, marker="x")
+    if x_real is not None and y_real is not None:
+        ax.scatter(x_real, y_real, s=5, alpha=0.3, marker="o", facecolors="none", edgecolors='k', linewidths=0.5)
+    if x_cog is not None and y_cog is not None:
+        ax.scatter(x_cog, y_cog, c="k", s=150, marker="x")
+
+
+    # # plot 3D volume
+    # fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    # ax.plot_surface(xi, yi, zgf, cmap="jet", alpha=0.5)
+    # ax.set_xlabel("antero-posterior (mm)")
+    # ax.set_ylabel("latero-medial (mm)")
+    # ax.set_zlabel("z (mm)")
+    # ax.set_title("3D map")
+    # plt.show()
+
+
     # ax.text(
     #     0.05,
     #     0.95,

@@ -141,14 +141,18 @@ def exclude_signal_data(p2p, baseline, n_map):
     return idx_general
 
 
-def get_random_points(list_nb_points, nb_total_points):
-    random.seed(42)
+def get_random_points(list_nb_points, nb_total_points, seed=None):
+    # test avec 50, 100, 2504, 26(pasmal), 58, 925
+    if seed is not None:
+        random.seed(seed)
     initial_list = np.arange(0, nb_total_points)
     random.shuffle(initial_list[4:])
     return [initial_list[0 : list_nb_points[i]] for i in range(len(list_nb_points))]
 
 
-def get_mep_from_excel(dir_path, trials, base_name, channel_names=None, exclude_mep=False, reverse=True):
+def get_mep_from_excel(dir_path, trials, base_name, channel_names=None, exclude_mep=True, reverse=True):
+    if '4_TN_SCI' in base_name: 
+        base_name = base_name.replace('TN', 'NT')
     all_mep_data = []
     all_frames = []
     nb_files = 0
@@ -194,14 +198,14 @@ def get_mep_from_excel(dir_path, trials, base_name, channel_names=None, exclude_
     return all_mep_data, all_frames
 
 
-def exclude_outliers(data, threshold=3.5):
+def exclude_outliers(data, threshold=3.5, mep_limit=50):
     for i in range(data.shape[0]):
         if data[i].sum() == 0:
             continue
-        mean = data[i][data[i] != 0].mean()
-        std = data[i][data[i] != 0].std()
-        idx_excluded = np.where(data[i] > mean + threshold * std)[0]
-        data[i][idx_excluded] = np.nan
+        data[i][data[i] <= mep_limit] = 0 # np.nan
+        mean = np.nanmean(data[i])
+        std = np.nanstd(data[i])
+        data[i][data[i] > mean + threshold * std] = 0 # np.nan
     return data
 
 
@@ -213,22 +217,15 @@ def get_cog(x, y, p2p):
     return x_cog, y_cog
 
 
-def get_area_and_volume(x, y, z):
-    x = x[z > np.max(z) * 0.1]
-    y = y[z > np.max(z) * 0.1]
-    z = z[z > np.max(z) * 0.1]
-    if x.size < 4:
-        return 0, 0
-    hull_area = ConvexHull(np.array([x, y]).T)
-    area = hull_area.volume
-    hull_volume = ConvexHull(np.array([x, y, z]).T)
-    volume = hull_volume.volume
+def get_area_and_volume(x, y, z, n_tot=2500, area_tot=36):
+    # get total area from x and y
+    area_tot = (abs(x.min()) + abs(x.max())) * (abs(y.min()) + abs(y.max()))
+    area = (len(np.where(z > z.max() * 0.1)[0]) / n_tot) * area_tot
+    volume = (np.sum(z[z > z.max() * 0.1]) - 0.1 * len(np.where(z > z.max() * 0.1)[0]) * z.max()) /(z.max() * area_tot)
     return area, volume
-
 
 def check_order(name):
     import csv
-
     number = int(name.split("_")[0][-3:])
     with open("participant_numbers.txt", "r") as f:
         reader = csv.reader(f, delimiter=",")
@@ -241,16 +238,7 @@ class ParticipantTest:
     def __init__(self, name):
         self.name = name
 
-    def part_dict(self):
-        return {
-            "base_name": "UA",
-            "dir_path": self._return_dir_path(self.name),
-            "pkl_file_name": self._return_pkl_file_name(self.name),
-            "excel_file_name": self._return_excel_file_name(self.name),
-        }
-
     def return_pkl_file_name(self):
-
         return rf"data_trial_test_mapping_{self.name}007.pkl"
 
     def return_pkl_file_base(self):
@@ -293,14 +281,8 @@ class Participant:
         if not "SCI" in name:
             self.pseudo_first = check_order(name)
         self.trials = ["2", "3", "4", "5", "6", "7"]
-
-    def part_dict(self):
-        return {
-            "base_name": "UA",
-            "dir_path": self._return_dir_path(self.name),
-            "pkl_file_name": self._return_pkl_file_name(self.name),
-            "excel_file_name": self._return_excel_file_name(self.name),
-        }
+        if 'SCI' in name:
+            self.trials = self.trials[1:]
 
     def return_pkl_file_name(self):
         return rf"data_trial_{self.name}00{self.return_pseudo_trial()[0]}.pkl"

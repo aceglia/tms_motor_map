@@ -1,4 +1,8 @@
+from re import X
 import stat
+
+from matplotlib import pyplot as plt
+import scipy
 from biosiglive.file_io.save_and_load import _read_all_lines, dic_merger
 import numpy as np
 from pygridfit import GridFit, TiledGridFit
@@ -41,13 +45,38 @@ class MapGenerator:
 
     def process_mep(self, peak_to_peak, baseline, mep_threeshold=25):
         for i in range(peak_to_peak.shape[0]):
-            mep_values = peak_to_peak[i, peak_to_peak[i, :] * 1e6 > mep_threeshold]
-            mep_values_to_exclude = mep_values.mean() + 3.5 * mep_values.std()
+            mean = np.nanmean(peak_to_peak[i, :])
+            std = np.nanstd(peak_to_peak[i, :])
+            # mep_values = peak_to_peak[i, peak_to_peak[i, :] * 1e6 > mep_threeshold]
+            mep_values_to_exclude = mean + 3.5 * std
             peak_to_peak[i, peak_to_peak[i, :] > mep_values_to_exclude] = np.nan
             # rms_baseline = [self.rolling_rms(baseline[:, i, j], 10) for j in range(baseline.shape[2])]
             # rms_baseline_mean = [np.nanmean(rms_baseline[j]) for j in range(len(rms_baseline))]
             # rms_baseline_std = [np.nanstd(rms_baseline[j]) for j in range(len(rms_baseline))]
         return peak_to_peak
+    
+    
+    def process_peaks(self, peak_to_peak, mep_threeshold=None, std_threeshold=3.5):
+        if mep_threeshold is not None:
+            all_mep = peak_to_peak[peak_to_peak * 1e6 > mep_threeshold]
+        else:
+            all_mep = peak_to_peak
+        mean = np.nanmean(all_mep)
+        std = np.nanstd(all_mep)
+        mep_values_to_exclude = mean + std_threeshold * std
+        peak_to_peak[peak_to_peak > mep_values_to_exclude] = np.nan
+        # peak_to_peak = self.remove_outliers(peak_to_peak, threshold=1.5)
+        return peak_to_peak
+
+    @staticmethod
+    def remove_outliers(data, threshold=1.5):
+        Q1 = np.nanpercentile(data, 25, axis=0)
+        Q3 = np.nanpercentile(data, 75, axis=0)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - (threshold * IQR)
+        upper_bound = Q3 + (threshold * IQR)
+        data[(data < lower_bound) & (data > upper_bound)] = np.nan
+        return data
 
     def generate_single_map(
         self,
@@ -57,30 +86,49 @@ class MapGenerator:
         n_point_grid,
         tiled=True,
         p2p=None,
+        pseudo=False
     ):
         mep_threeshold = 25
-
-        peak_to_peak = self.process_mep(np.ptp(mep_data, axis=0), baseline, mep_threeshold) if p2p is None else p2p
-
+        peak_to_peak = np.ptp(mep_data, axis=0) if p2p is None else p2p*1e-6
+        # peak_to_peak = self.process_mep(np.ptp(mep_data, axis=0), baseline, mep_threeshold) if p2p is None else p2p
+        # peak_to_peak = np.ptp(mep_data, axis=0)
+        # import matplotlib.pyplot as plt
+        # plt.plot(peak_to_peak[0, :]*1e6)
+        # mean = np.nanmean(peak_to_peak[0, peak_to_peak[0, :]*1e6 > 50] * 1e6)
+        # std = np.nanstd(peak_to_peak[0, peak_to_peak[0, :]*1e6 > 50] * 1e6)
+        # plt.axhline(mean + 3.5 * std, color="r")
+        # plt.axhline(mean - 3.5 * std, color="r")
+        # plt.show()
         x_list, y_list, z_list = [], [], []
+        xgf_list, ygf_list, zgf_list = [], [], []
         x_cog_list, y_cog_list = [], []
         area_list = []
         volume_list = []
+        if 'SCI' in self.data_name_base and not pseudo:
+            points[points[:, 1] > 34, 1] = np.nan
         for i in range(peak_to_peak.shape[0]):
-            z = peak_to_peak[i, :]
-            
+            # std_threeshold = 1.5 if ('P009_TN' in self.data_name_base) else 3.5
+            std_threeshold = 3.5 
+            z = self.process_peaks(peak_to_peak[i, :], mep_threeshold = 30, std_threeshold=std_threeshold)
             x, y = points[:, 0], points[:, 1]
             z[np.isnan(x) | np.isnan(y)] = np.nan
+            x[np.isnan(z)] = np.nan
+            y[np.isnan(z)] = np.nan
             x_min, x_max = np.nanmin(x), np.nanmax(x)
             y_min, y_max = np.nanmin(y), np.nanmax(y)
 
             xi_fit = np.linspace(x_min, x_max, n_point_grid)
             yi_fit = np.linspace(y_min, y_max, n_point_grid)
-
+            # z[np.isnan(z)] = 0
             if (np.nanmax(z) - np.nanmin(z)) != 0:
                 normalized_z = (z - np.nanmin(z)) / (np.nanmax(z) - np.nanmin(z))
+            elif np.nanmax(z) != 0:
+                normalized_z = z / np.nanmax(z)
             else:
                 normalized_z = z
+            # to_divide = 1 if np.nanmax(z) == 0 else np.nanmax(z)
+            # normalized_z = z / to_divide
+            smoothness = 5 if pseudo else 5
             if tiled:
                 gf = TiledGridFit(
                     x,
@@ -88,23 +136,33 @@ class MapGenerator:
                     normalized_z,
                     xnodes=xi_fit,
                     ynodes=yi_fit,
-                    smoothness=15,
+                    smoothness=smoothness,
                     interp="triangle",
                     regularizer="gradient",
                     solver="normal",
-                    tilesize=120,
-                    overlap=0.15,
+                    tilesize=150,
+                    overlap=0.35,
                 ).fit()
             else:
-                gf = GridFit(x, y, normalized_z, xi_fit, yi_fit).fit()
-
+                gf = GridFit(x, y, normalized_z,
+                            xi_fit, yi_fit, 
+                            extend='never', 
+                            smoothness=smoothness,
+                            interp="triangle",
+                            regularizer="gradient",
+                            solver="normal",
+                             ).fit()
             zgf = np.clip(gf.zgrid, a_min=0, a_max=gf.zgrid.max())
             xgf = gf.xgrid
             ygf = gf.ygrid
-            area, volume = get_area_and_volume(xgf.flatten(), ygf.flatten(), zgf.flatten())
+            
+            area, volume = get_area_and_volume(xgf.flatten(), ygf.flatten(), zgf.flatten(), )
             x_list.append(x)
             y_list.append(y)
-            z_list.append(zgf)
+            z_list.append(z)
+            xgf_list.append(xgf)
+            ygf_list.append(ygf)
+            zgf_list.append(zgf)
             x_cog, y_cog = get_cog(xgf.flatten(), ygf.flatten(), zgf.flatten())
             x_cog_list.append(x_cog)
             y_cog_list.append(y_cog)
@@ -115,6 +173,9 @@ class MapGenerator:
             "x_list": x_list,
             "y_list": y_list,
             "z_list": z_list,
+            "xgf_list": xgf_list,
+            "ygf_list": ygf_list,
+            "zgf_list": zgf_list,
             "x_cog_list": x_cog_list,
             "y_cog_list": y_cog_list,
             "area_list": area_list,
@@ -122,38 +183,6 @@ class MapGenerator:
         }
         return map_caracteristics
 
-    # def generate_map(
-    #     self,
-    #     signal_data=None,
-    #     position=None,
-    #     stimulation_time=1,
-    #     n_point_grid=50,
-    #     plot=True,
-    #     windows=((50, 5), (10, 50)),
-    #     idx_axis_1=None,
-    # ):
-    #     position = position if position is not None else self.position
-    #     signal_data = signal_data if signal_data is not None else self.signal_data
-    #     if not isinstance(position, list):
-    #         position = [position]
-    #     if not isinstance(signal_data, list):
-    #         signal_data = [signal_data]
-    #     assert len(signal_data) == len(position)
-    #     x_list_global, y_list_global, z_list_global = [], [], []
-    #     for i in range(len(position)):
-    #         points, idx_excluded_brainsight = self.get_local_projected_points(
-    #             position[i][:, 3, :3], idx_axis_1=idx_axis_1
-    #         )
-    #         baseline, mep_data = self._get_baseline_mep(signal_data[i], stimulation_time, windows)
-    #         # signal_data = np.delete(signal_data, idx_excluded_brainsight[0], axis=-1)
-    #         # baseline = np.delete(baseline, idx_excluded_brainsight[0], axis=-1)
-    #         x_list, y_list, z_list = self.generate_single_map(mep_data, baseline, points, n_point_grid)
-    #         if plot:
-    #             plot_map((x_list, y_list, z_list), n_point_grid)
-    #         x_list_global.append(x_list)
-    #         y_list_global.append(y_list)
-    #         z_list_global.append(z_list)
-    #     return x_list_global, y_list_global, z_list_global
 
     def get_local_projected_points(self, points, idx_axis_1=None):
 
