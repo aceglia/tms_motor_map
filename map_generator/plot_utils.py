@@ -4,11 +4,9 @@ import numpy as np
 
 def plot_3D_points(points, plane=None, show=True, ax_3d=None):
     fig = plt.figure(figsize=(10, 7))
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
     ax.scatter(points[:, 0], points[:, 1], points[:, 2])
     set_axes_equal(ax)
-
-
 
     # # if plane is not None:
     # #     (x, y, z), com = plane
@@ -112,8 +110,11 @@ def plot_heatmap(points, mep, ax=None):
     plt.colorbar(im, ax=ax)
 
 
-def plot_single_map(x, y, zgf, ax=None, n_point_grid=50, x_cog=None, y_cog=None, area=None, volume=None, x_real=None, y_real=None):
+def plot_single_map(
+    x, y, zgf, ax=None, n_point_grid=50, x_cog=None, y_cog=None, area=None, volume=None, x_real=None, y_real=None
+):
     from scipy.spatial import ConvexHull
+
     if ax is None:
         fig, ax = plt.subplots()
     x_min, x_max = np.nanmin(x), np.nanmax(x)
@@ -130,17 +131,17 @@ def plot_single_map(x, y, zgf, ax=None, n_point_grid=50, x_cog=None, y_cog=None,
     if x.size < 4:
         return 0, 0
     # hull_area = ConvexHull(np.array([x, y]).T)
-    #plot the points and the convex hull
+    # plot the points and the convex hull
     import matplotlib.pyplot as plt
+
     # for simplex in hull_area.simplices:
     #     ax.plot(x[simplex], y[simplex], 'k-')
 
     ax.contourf(xi, yi, zgf, n_point_grid, cmap="jet")
     if x_real is not None and y_real is not None:
-        ax.scatter(x_real, y_real, s=5, alpha=0.3, marker="o", facecolors="none", edgecolors='k', linewidths=0.5)
+        ax.scatter(x_real, y_real, s=5, alpha=0.3, marker="o", facecolors="none", edgecolors="k", linewidths=0.5)
     if x_cog is not None and y_cog is not None:
         ax.scatter(x_cog, y_cog, c="k", s=150, marker="x")
-
 
     # # plot 3D volume
     # fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
@@ -150,7 +151,6 @@ def plot_single_map(x, y, zgf, ax=None, n_point_grid=50, x_cog=None, y_cog=None,
     # ax.set_zlabel("z (mm)")
     # ax.set_title("3D map")
     # plt.show()
-
 
     # ax.text(
     #     0.05,

@@ -40,7 +40,7 @@ class MapGenerator:
 
     @staticmethod
     def rolling_rms(x, N):
-        xc = np.cumsum(abs(x)**2)
+        xc = np.cumsum(abs(x) ** 2)
         return np.sqrt((xc[N:] - xc[:-N]) / N)
 
     def process_mep(self, peak_to_peak, baseline, mep_threeshold=25):
@@ -54,8 +54,7 @@ class MapGenerator:
             # rms_baseline_mean = [np.nanmean(rms_baseline[j]) for j in range(len(rms_baseline))]
             # rms_baseline_std = [np.nanstd(rms_baseline[j]) for j in range(len(rms_baseline))]
         return peak_to_peak
-    
-    
+
     def process_peaks(self, peak_to_peak, mep_threeshold=None, std_threeshold=3.5):
         if mep_threeshold is not None:
             all_mep = peak_to_peak[peak_to_peak * 1e6 > mep_threeshold]
@@ -78,18 +77,9 @@ class MapGenerator:
         data[(data < lower_bound) & (data > upper_bound)] = np.nan
         return data
 
-    def generate_single_map(
-        self,
-        mep_data,
-        baseline,
-        points,
-        n_point_grid,
-        tiled=True,
-        p2p=None,
-        pseudo=False
-    ):
+    def generate_single_map(self, mep_data, baseline, points, n_point_grid, tiled=True, p2p=None, pseudo=False):
         mep_threeshold = 25
-        peak_to_peak = np.ptp(mep_data, axis=0) if p2p is None else p2p*1e-6
+        peak_to_peak = np.ptp(mep_data, axis=0) if p2p is None else p2p * 1e-6
         # peak_to_peak = self.process_mep(np.ptp(mep_data, axis=0), baseline, mep_threeshold) if p2p is None else p2p
         # peak_to_peak = np.ptp(mep_data, axis=0)
         # import matplotlib.pyplot as plt
@@ -104,12 +94,12 @@ class MapGenerator:
         x_cog_list, y_cog_list = [], []
         area_list = []
         volume_list = []
-        if 'SCI' in self.data_name_base and not pseudo:
+        if "SCI" in self.data_name_base and not pseudo:
             points[points[:, 1] > 34, 1] = np.nan
         for i in range(peak_to_peak.shape[0]):
             # std_threeshold = 1.5 if ('P009_TN' in self.data_name_base) else 3.5
-            std_threeshold = 3.5 
-            z = self.process_peaks(peak_to_peak[i, :], mep_threeshold = 30, std_threeshold=std_threeshold)
+            std_threeshold = 3.5
+            z = self.process_peaks(peak_to_peak[i, :], mep_threeshold=30, std_threeshold=std_threeshold)
             x, y = points[:, 0], points[:, 1]
             z[np.isnan(x) | np.isnan(y)] = np.nan
             x[np.isnan(z)] = np.nan
@@ -144,19 +134,27 @@ class MapGenerator:
                     overlap=0.35,
                 ).fit()
             else:
-                gf = GridFit(x, y, normalized_z,
-                            xi_fit, yi_fit, 
-                            extend='never', 
-                            smoothness=smoothness,
-                            interp="triangle",
-                            regularizer="gradient",
-                            solver="normal",
-                             ).fit()
+                gf = GridFit(
+                    x,
+                    y,
+                    normalized_z,
+                    xi_fit,
+                    yi_fit,
+                    extend="never",
+                    smoothness=smoothness,
+                    interp="triangle",
+                    regularizer="gradient",
+                    solver="normal",
+                ).fit()
             zgf = np.clip(gf.zgrid, a_min=0, a_max=gf.zgrid.max())
             xgf = gf.xgrid
             ygf = gf.ygrid
-            
-            area, volume = get_area_and_volume(xgf.flatten(), ygf.flatten(), zgf.flatten(), )
+
+            area, volume = get_area_and_volume(
+                xgf.flatten(),
+                ygf.flatten(),
+                zgf.flatten(),
+            )
             x_list.append(x)
             y_list.append(y)
             z_list.append(z)
@@ -182,7 +180,6 @@ class MapGenerator:
             "volume_list": volume_list,
         }
         return map_caracteristics
-
 
     def get_local_projected_points(self, points, idx_axis_1=None):
 

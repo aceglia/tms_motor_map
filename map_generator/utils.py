@@ -106,7 +106,7 @@ def get_plane_from_points(points, points_to_center=None):
     _, _, Vt = np.linalg.svd(centered)
 
     normal = Vt[2]
-    first_dir = Vt[0]  # first principal direction 
+    first_dir = Vt[0]  # first principal direction
     y_axis = np.cross(normal, first_dir)
     cross_product = np.cross(normal, y_axis)
     x_axis = -cross_product if np.linalg.det([cross_product, y_axis, normal]) < 0 else cross_product
@@ -151,8 +151,8 @@ def get_random_points(list_nb_points, nb_total_points, seed=None):
 
 
 def get_mep_from_excel(dir_path, trials, base_name, channel_names=None, exclude_mep=True, reverse=True):
-    if '4_TN_SCI' in base_name: 
-        base_name = base_name.replace('TN', 'NT')
+    if "4_TN_SCI" in base_name:
+        base_name = base_name.replace("TN", "NT")
     all_mep_data = []
     all_frames = []
     nb_files = 0
@@ -202,10 +202,10 @@ def exclude_outliers(data, threshold=3.5, mep_limit=50):
     for i in range(data.shape[0]):
         if data[i].sum() == 0:
             continue
-        data[i][data[i] <= mep_limit] = 0 # np.nan
+        data[i][data[i] <= mep_limit] = 0  # np.nan
         mean = np.nanmean(data[i])
         std = np.nanstd(data[i])
-        data[i][data[i] > mean + threshold * std] = 0 # np.nan
+        data[i][data[i] > mean + threshold * std] = 0  # np.nan
     return data
 
 
@@ -221,11 +221,13 @@ def get_area_and_volume(x, y, z, n_tot=2500, area_tot=36):
     # get total area from x and y
     area_tot = (abs(x.min()) + abs(x.max())) * (abs(y.min()) + abs(y.max()))
     area = (len(np.where(z > z.max() * 0.1)[0]) / n_tot) * area_tot
-    volume = (np.sum(z[z > z.max() * 0.1]) - 0.1 * len(np.where(z > z.max() * 0.1)[0]) * z.max()) /(z.max() * area_tot)
+    volume = (np.sum(z[z > z.max() * 0.1]) - 0.1 * len(np.where(z > z.max() * 0.1)[0]) * z.max()) / (z.max() * area_tot)
     return area, volume
+
 
 def check_order(name):
     import csv
+
     number = int(name.split("_")[0][-3:])
     with open("participant_numbers.txt", "r") as f:
         reader = csv.reader(f, delimiter=",")
@@ -281,7 +283,7 @@ class Participant:
         if not "SCI" in name:
             self.pseudo_first = check_order(name)
         self.trials = ["2", "3", "4", "5", "6", "7"]
-        if 'SCI' in name:
+        if "SCI" in name:
             self.trials = self.trials[1:]
 
     def return_pkl_file_name(self):

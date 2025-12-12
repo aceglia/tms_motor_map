@@ -55,10 +55,11 @@ def get_data_from_grid(map_gen, trials, mep_data=None, frame_for_file=None):
         mep_data_mat = [None for _ in range(len(signal_mat))]
     return target_names, position_mat, signal_mat, mep_data_mat, target_position_mat
 
+
 def check_frame_numbers(map_gen, mep_data, frame_from_file):
     ordered_mep_data = []
     for i in range(len(frame_from_file)):
-        frame_from_pkl = [int(frame.split(' ')[1]) for frame in map_gen.all_data[i]['signal_data']["frame_number"]]
+        frame_from_pkl = [int(frame.split(" ")[1]) for frame in map_gen.all_data[i]["signal_data"]["frame_number"]]
         idx_list = [np.where(frame_from_pkl[j] == frame_from_file[i][0])[0][0] for j in range(len(frame_from_pkl))]
         frame_from_file[i][0][idx_list]
         ordered_mep_data.append(mep_data[i][:, idx_list])
@@ -69,6 +70,7 @@ def get_data(map_gen, mep_data, trial_list=None, pseudo=False, frame_from_file=N
     if pseudo:
         return get_data_from_pseudo(map_gen, mep_data, frame_from_file, seed)
     return get_data_from_grid(map_gen, trial_list, mep_data, frame_from_file)
+
 
 def get_idx_to_rotate(target_names):
     grid_name = target_names[0][0].split(" ")[0]
@@ -84,6 +86,7 @@ def get_idx_to_rotate(target_names):
     )
     colors = ["r", "g", "b", "c"]
     return idx_axis_1, to_plot, colors
+
 
 def compute_maps(participant, pseudo=False, data_rate=2148, p2p_from_file=False, grid_target_pos=None, seed=None):
     map_instance = PseudoRandomGenerator if pseudo else GridBasedGenerator
@@ -116,10 +119,10 @@ def compute_maps(participant, pseudo=False, data_rate=2148, p2p_from_file=False,
             signal_data = signal_mat[i]
             target_names_tmp = target_names[i]
             mep_data_tmp = mep_data_mat[i] if mep_data_mat[i] is not None else None
-        
+
         idx_axis_1, to_plot, colors = get_idx_to_rotate(target_names_tmp)
         # if i == 0:
-            # plot 3d
+        # plot 3d
         # position = grid_target_pos[0][:, 3, :3] if pseudo else target_position[0][:, 3, :3]
         # (x, y, z), com = get_plane_from_points(position) #, position_mat[-1][:, 3, :3])
         # increase weigthing at the corner at index "to_plot"
@@ -128,9 +131,9 @@ def compute_maps(participant, pseudo=False, data_rate=2148, p2p_from_file=False,
             # points_to_add = points[to_plot, :]
             # repeat point to add
             # points_weighted = np.vstack((points_weighted, np.repeat(points_to_add, 10, axis=0)))
-            (x, y, z), com = get_plane_from_points(points_weighted) #, position_mat[-1][:, 3, :3])
+            (x, y, z), com = get_plane_from_points(points_weighted)  # , position_mat[-1][:, 3, :3])
         else:
-            (x, y, z), com = get_plane_from_points(points) #, position_mat[-1][:, 3, :3])
+            (x, y, z), com = get_plane_from_points(points)  # , position_mat[-1][:, 3, :3])
         # from map_generator.plot_utils import plot_plane
         # plot_plane(points, com, z, fig_name='global')
         # (x, y, z), com = get_plane_from_points(points_weighted) #, position_mat[-1][:, 3, :3])
@@ -151,31 +154,23 @@ def compute_maps(participant, pseudo=False, data_rate=2148, p2p_from_file=False,
 
         mep_data_tmp = None if not p2p_from_file else mep_data_tmp
         map_characteristics_tmp = map_gen.generate_single_map(
-            mep_data,
-            baseline,
-            rotated_points,
-            50,
-            p2p=mep_data_tmp,
-            tiled=False,
-            pseudo=pseudo
+            mep_data, baseline, rotated_points, 50, p2p=mep_data_tmp, tiled=False, pseudo=pseudo
         )
 
-        map_characteristics_tmp.update({'time_to_compute': time.time() - tic})
+        map_characteristics_tmp.update({"time_to_compute": time.time() - tic})
         maps_characteristics.append(map_characteristics_tmp)
     target_pos_to_return = target_position if not pseudo else None
     return maps_characteristics, target_pos_to_return
 
 
-def plot_maps(characteristics_list, name="", fold='', muscle_names=None):
-    init_muscle_names = ['fdi', 'ext_comm', 'sup', 'tri', 'delt_post']
+def plot_maps(characteristics_list, name="", fold="", muscle_names=None):
+    init_muscle_names = ["fdi", "ext_comm", "sup", "tri", "delt_post"]
     muscle_names = init_muscle_names if not muscle_names else muscle_names
     idx_muscles = [init_muscle_names.index(name) for name in muscle_names]
-    fig, ax = plt.subplots(
-        len(characteristics_list), len(muscle_names), num=name, sharey=True, sharex=True
-    )
+    fig, ax = plt.subplots(len(characteristics_list), len(muscle_names), num=name, sharey=True, sharex=True)
 
     for i, characteristics in enumerate(characteristics_list):
-        
+
         x_list, y_list, z_list = (
             characteristics["xgf_list"],
             characteristics["ygf_list"],
@@ -192,7 +187,19 @@ def plot_maps(characteristics_list, name="", fold='', muscle_names=None):
             # plot_2d_points(rotated_points, ax[1, j], colorized_points=(to_plot, colors))
             # plot_heatmap(rotated_points, mep_data[:, j, :], ax[2, j])
             # plot_single_map(x_list[j], y_list[j], z_list[j], ax[i, j], 50, 0,0, area[j], volume[j])
-            plot_single_map(x_list[j], y_list[j], z_list[j], ax[i, j], 50, x_cog[j], y_cog[j], area[j], volume[j], x_real[j], y_real[j])
+            plot_single_map(
+                x_list[j],
+                y_list[j],
+                z_list[j],
+                ax[i, j],
+                50,
+                x_cog[j],
+                y_cog[j],
+                area[j],
+                volume[j],
+                x_real[j],
+                y_real[j],
+            )
             if j == 0 and i == len(x_list) // 2:
                 ax[i, j].set_ylabel(f"latero-medial (mm)\n Map {i}")
             elif j == 0:
@@ -205,7 +212,7 @@ def plot_maps(characteristics_list, name="", fold='', muscle_names=None):
 
     fig.suptitle(f"Map {name}")
     # save figure
-    plt.savefig(fr"D:\Documents\Programmation\tms_motor_map\results\{fold}\maps_characteristics_{name}.png")
+    plt.savefig(rf"D:\Documents\Programmation\tms_motor_map\results\{fold}\maps_characteristics_{name}.png")
 
 
 def plot_characteristics(characteristics_list, name="", absolutes=False):
@@ -234,7 +241,7 @@ def plot_characteristics(characteristics_list, name="", absolutes=False):
             _ = [ax[4, i].scatter(x_plot[p], cor[p]) for p in range(n_map - 1)]
 
 
-def add_to_dataframe(maps, data_frame, participant, condition, muscle_list, fold='', seed=''):
+def add_to_dataframe(maps, data_frame, participant, condition, muscle_list, fold="", seed=""):
     cog_err_x = [[np.nan for _ in range(len(muscle_list))]]
     cog_err_x = cog_err_x + [
         np.abs(np.array(maps[i + 1]["x_cog_list"]) - np.array(maps[i]["x_cog_list"])) for i in range(len(maps) - 1)
@@ -245,14 +252,17 @@ def add_to_dataframe(maps, data_frame, participant, condition, muscle_list, fold
     ]
     cog_err_eucl = [[np.nan for _ in range(len(muscle_list))]]
     cog_err_eucl = cog_err_eucl + [
-        np.linalg.norm(np.array([maps[i + 1]["x_cog_list"], maps[i + 1]["y_cog_list"]]) - np.array([maps[i]["x_cog_list"], maps[i]["y_cog_list"]]), axis=0)
+        np.linalg.norm(
+            np.array([maps[i + 1]["x_cog_list"], maps[i + 1]["y_cog_list"]])
+            - np.array([maps[i]["x_cog_list"], maps[i]["y_cog_list"]]),
+            axis=0,
+        )
         for i in range(len(maps) - 1)
     ]
     cor_coef = [[np.nan for _ in range(len(muscle_list))]]
     cor_coef = cor_coef + [
         [
-            pearsonr(maps[i + 1]["zgf_list"][m].flatten(),
-                      maps[i]["zgf_list"][m].flatten())[0]
+            pearsonr(maps[i + 1]["zgf_list"][m].flatten(), maps[i]["zgf_list"][m].flatten())[0]
             for m in range(len(muscle_list))
         ]
         for i in range(len(maps) - 1)
@@ -273,21 +283,27 @@ def add_to_dataframe(maps, data_frame, participant, condition, muscle_list, fold
                 "y_cog_error": cog_err_y[m],
                 "euclid_cog_error": cog_err_eucl[m],
                 "correlation_coefficient": cor_coef[m],
-                "time_to_compute": [char['time_to_compute']] * len(muscle_list),
+                "time_to_compute": [char["time_to_compute"]] * len(muscle_list),
             }
         )
-        name = f"results\{fold}\maps_values.bio" 
-        save({"participant": [participant], 
-              "condition": [condition], 
-              "map_number": [m],
-              "muscle": muscle_list,
+        name = f"results\{fold}\maps_values.bio"
+        save(
+            {
+                "participant": [participant],
+                "condition": [condition],
+                "map_number": [m],
+                "muscle": muscle_list,
                 "xgf_list": char["xgf_list"],
                 "ygf_list": char["ygf_list"],
                 "zgf_list": char["zgf_list"],
                 "x_list": char["x_list"],
                 "y_list": char["y_list"],
-                "z_list": char["z_list"]},  name, add_data=True)
-        
+                "z_list": char["z_list"],
+            },
+            name,
+            add_data=True,
+        )
+
         if data_frame.empty:
             data_frame = data_frame_tmp
         else:
@@ -306,17 +322,25 @@ if __name__ == "__main__":
     seed = np.random.randint(0, 100000)
     seed = 10
     # seed = 'test'
-    fold = f'smooth_5_5_{seed}'
-    os.makedirs(f'results\{fold}', exist_ok=True)
+    fold = f"smooth_5_5_{seed}"
+    os.makedirs(f"results\{fold}", exist_ok=True)
     # for i in range(batch_number):
     import time
+
     target = None
     data_frame = pd.DataFrame()
     for part_name in participants:
         participant = Participant(part_name)
         for m, name in enumerate(condition):
-            maps, target = compute_maps(participant, pseudo=name == "pseudo", data_rate=2148, p2p_from_file=p2p_from_file, grid_target_pos=target, seed=seed)
-            plot_maps(maps, name=name + f' maps participant {part_name}', fold=fold, muscle_names=muscle_list[:3])
+            maps, target = compute_maps(
+                participant,
+                pseudo=name == "pseudo",
+                data_rate=2148,
+                p2p_from_file=p2p_from_file,
+                grid_target_pos=target,
+                seed=seed,
+            )
+            plot_maps(maps, name=name + f" maps participant {part_name}", fold=fold, muscle_names=muscle_list[:3])
             data_frame = add_to_dataframe(maps, data_frame, part_name, name, muscle_list, fold, seed)
             # plt.show()
     dir_to_save = f"maps_characteristics.csv"
