@@ -1,8 +1,5 @@
-from re import X
-import stat
-
 from matplotlib import pyplot as plt
-import scipy
+from scipy.io import loadmat
 from biosiglive.file_io.save_and_load import _read_all_lines, dic_merger
 import numpy as np
 from pygridfit import GridFit, TiledGridFit
@@ -55,7 +52,8 @@ class MapGenerator:
             # rms_baseline_std = [np.nanstd(rms_baseline[j]) for j in range(len(rms_baseline))]
         return peak_to_peak
 
-    def process_peaks(self, peak_to_peak, mep_threeshold=None, std_threeshold=3.5):
+    def process_peaks(self, peak_to_peak, mep_threeshold=None, std_threeshold=3.5, baseline=None):
+        rms_baseline = np.sqrt(np.mean(baseline ** 2, axis=0))
         if mep_threeshold is not None:
             all_mep = peak_to_peak[peak_to_peak * 1e6 > mep_threeshold]
         else:
@@ -64,6 +62,9 @@ class MapGenerator:
         std = np.nanstd(all_mep)
         mep_values_to_exclude = mean + std_threeshold * std
         peak_to_peak[peak_to_peak > mep_values_to_exclude] = np.nan
+        # peak_to_peak[rms_baseline >  mean + 2 * std] = np.nan
+        # idx = 
+        # peak_to_peak[rms_baseline >  mean - 2 * std] = np.nan
         # peak_to_peak = self.remove_outliers(peak_to_peak, threshold=1.5)
         return peak_to_peak
 
@@ -77,7 +78,7 @@ class MapGenerator:
         data[(data < lower_bound) & (data > upper_bound)] = np.nan
         return data
 
-    def generate_single_map(self, mep_data, baseline, points, n_point_grid, tiled=True, p2p=None, pseudo=False):
+    def generate_single_map(self, mep_data, baseline, points, n_point_grid, tiled=True, p2p=None, pseudo=False, smoothness=None):
         mep_threeshold = 25
         peak_to_peak = np.ptp(mep_data, axis=0) if p2p is None else p2p * 1e-6
         # peak_to_peak = self.process_mep(np.ptp(mep_data, axis=0), baseline, mep_threeshold) if p2p is None else p2p
@@ -99,7 +100,7 @@ class MapGenerator:
         for i in range(peak_to_peak.shape[0]):
             # std_threeshold = 1.5 if ('P009_TN' in self.data_name_base) else 3.5
             std_threeshold = 3.5
-            z = self.process_peaks(peak_to_peak[i, :], mep_threeshold=30, std_threeshold=std_threeshold)
+            z = self.process_peaks(peak_to_peak[i, :], mep_threeshold=0, std_threeshold=std_threeshold, baseline=baseline[i, :])
             x, y = points[:, 0], points[:, 1]
             z[np.isnan(x) | np.isnan(y)] = np.nan
             x[np.isnan(z)] = np.nan
@@ -118,7 +119,7 @@ class MapGenerator:
                 normalized_z = z
             # to_divide = 1 if np.nanmax(z) == 0 else np.nanmax(z)
             # normalized_z = z / to_divide
-            smoothness = 5 if pseudo else 5
+            smoothness = smoothness if smoothness is not None else 5
             if tiled:
                 gf = TiledGridFit(
                     x,
@@ -202,7 +203,32 @@ class MapGenerator:
 
         return rotated_local, idx_excluded_z
 
+    def _get_chan_names(self, chaninfo):
+        return [str(chaninfo[i][1][0]) for i in range(chaninfo.shape[0])]
+    
+    def _load_from_wave_data(self, wave_data):
+        items = list(wave_data[0][0].dtype.fields.keys())
+        chanel_names = self._get_chan_names(wave_data[0][0][items.index("chaninfo")].reshape(-1))
+        frames = list(range(wave_data[0][0][items.index("frames")][0][0]))
+        array = wave_data[0][0][items.index("values")]
+        array = np.swapaxes(array, 0, -1)
+        return array, chanel_names, frames
+    
+    def load_mat_file(self, path):
+        try:
+            mat_file = loadmat(path)
+        except:
+            raise ValueError("Not able to load the .mat file. Try exporting in version 6 or lower of matlab.")           
+        wave_data = [key for key in mat_file.keys() if "wave_data" in key][0]
+
+        if len(wave_data) > 0:
+            return self._load_from_wave_data(mat_file[wave_data])
+        
+        else:
+            raise ValueError("No recognized data found in the .mat file.")
+
     def _load_data(self, max_lines=None, idx_list=None):
+        data_from_mat = []
         for file_name in self.data_path_list:
             data = _read_all_lines(file_name, data=[], merge=False)
             if max_lines:
@@ -228,9 +254,24 @@ class MapGenerator:
                 new_dict = dic_merger(d, new_dict)
             self.all_data.append(new_dict)
 
+            mat_file = file_name.replace('.pkl', '.mat').replace('data_trial_', '')
+            mat_data = self.load_mat_file(mat_file)
+            frames_mat = [v + 1 for v in mat_data[-1]]
+            values = np.swapaxes(mat_data[0], 0, -1)
+            synch_data_path = file_name.replace('data_trial_', 'synch_trial_').replace('.pkl', '.txt')
+            with open(synch_data_path, 'r') as f:
+                frames = [int(row[row.find('Frame ') + len('Frame '):row.find(';')]) for row in f]
+            reordered_values = np.zeros((values.shape[0], values.shape[1], len(frames)))
+            for i, frame in enumerate(frames):
+                idx = frames_mat.index(frame)
+                reordered_values[..., i] = values[:, :, idx]
+            reordered_values = reordered_values[..., ::-1]
+            data_from_mat.append(reordered_values)
+
         self.brainsight_data = [new_dict["brainsight_data"] for new_dict in self.all_data]
         self.position = [brainsight_data["position"].reshape(4, 4, -1).T for brainsight_data in self.brainsight_data]
-        self.signal_data = [new_dict["signal_data"]["data"] for new_dict in self.all_data]
+        # self.signal_data = [new_dict["signal_data"]["data"] for new_dict in self.all_data]
+        self.signal_data = data_from_mat
         # center signal data
         self.signal_data = [
             signal_data - np.mean(signal_data, axis=0, keepdims=True) for signal_data in self.signal_data

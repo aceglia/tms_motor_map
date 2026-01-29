@@ -1,5 +1,4 @@
 import os
-from matplotlib import axis
 import matplotlib.pyplot as plt
 import pandas as pd
 from biosiglive import load
@@ -22,17 +21,24 @@ def get_data_from_pseudo(map_gen, mep_data=None, frame_for_file=None, seed=None)
     nb_stim_list = [24, 44, 64, 94, 124, 154, map_gen.signal_data[0].shape[-1]]
     rdm_points = get_random_points(nb_stim_list, nb_total_points=map_gen.signal_data[0].shape[-1], seed=seed)
     target_names = map_gen.brainsight_data[0]["target_name"]
-    target_names_roll = np.roll(target_names, 4)
-    signal_data_roll = np.roll(map_gen.signal_data[0], 4, axis=-1)
-    position_roll = np.roll(map_gen.position[0], 4, axis=0)
-    target_position = np.roll(map_gen.target_position[0], 4, axis=0)
+    if 'grid_7x7_P006' in target_names[0, 0]:
+        target_names = np.roll(target_names, 1, axis=-1)
+        map_gen.signal_data[0] = np.roll(map_gen.signal_data[0], 1, axis=-1)
+        map_gen.position[0] = np.roll(map_gen.position[0], 1, axis=0)
+        map_gen.target_position[0] = np.roll(map_gen.target_position[0], 1, axis=0)
+
+    n_roll = 4
+    target_names_roll = np.roll(target_names, n_roll, axis=-1)
+    signal_data_roll = np.roll(map_gen.signal_data[0], n_roll, axis=-1)
+    position_roll = np.roll(map_gen.position[0], n_roll, axis=0)
+    target_position = np.roll(map_gen.target_position[0], n_roll, axis=0)
     signal_mat = [signal_data_roll[..., rdm_points[i]] for i in range(len(rdm_points))]
     position_mat = [position_roll[rdm_points[i]] for i in range(len(rdm_points))]
     target_position_mat = [target_position[rdm_points[i]] for i in range(len(rdm_points))]
     target_names_mat = [target_names_roll[:, rdm_points[i]] for i in range(len(rdm_points))]
     if p2p_from_file and mep_data is not None:
         mep_data = check_frame_numbers(map_gen, mep_data, frame_for_file)
-        mep_data_file_roll = np.roll(mep_data[0], 4, axis=-1)
+        mep_data_file_roll = np.roll(mep_data[0], n_roll, axis=-1)
         mep_data_mat = [mep_data_file_roll[..., rdm_points[i]] for i in range(len(rdm_points))]
     else:
         mep_data_mat = [None for _ in range(len(signal_mat))]
@@ -88,7 +94,9 @@ def get_idx_to_rotate(target_names):
     return idx_axis_1, to_plot, colors
 
 
-def compute_maps(participant, pseudo=False, data_rate=2148, p2p_from_file=False, grid_target_pos=None, seed=None):
+def compute_maps(
+    participant, pseudo=False, data_rate=2148, p2p_from_file=False, grid_target_pos=None, seed=None, smoothness=None
+):
     map_instance = PseudoRandomGenerator if pseudo else GridBasedGenerator
     file_name = participant.return_pkl_file_name() if pseudo else participant.return_pkl_file_base()
     map_gen = map_instance(
@@ -154,9 +162,8 @@ def compute_maps(participant, pseudo=False, data_rate=2148, p2p_from_file=False,
 
         mep_data_tmp = None if not p2p_from_file else mep_data_tmp
         map_characteristics_tmp = map_gen.generate_single_map(
-            mep_data, baseline, rotated_points, 50, p2p=mep_data_tmp, tiled=False, pseudo=pseudo
+            mep_data, baseline, rotated_points, 50, p2p=mep_data_tmp, tiled=False, pseudo=pseudo, smoothness=smoothness
         )
-
         map_characteristics_tmp.update({"time_to_compute": time.time() - tic})
         maps_characteristics.append(map_characteristics_tmp)
     target_pos_to_return = target_position if not pseudo else None
@@ -286,7 +293,7 @@ def add_to_dataframe(maps, data_frame, participant, condition, muscle_list, fold
                 "time_to_compute": [char["time_to_compute"]] * len(muscle_list),
             }
         )
-        name = f"results\{fold}\maps_values.bio"
+        name = f"results\{fold}\maps_values_test.bio"
         save(
             {
                 "participant": [participant],
@@ -312,8 +319,10 @@ def add_to_dataframe(maps, data_frame, participant, condition, muscle_list, fold
 
 
 if __name__ == "__main__":
-    paticipants = list(range(2, 14))
-    participants = [f"P{p:03d}_TN" for p in paticipants]
+    paticipants = list(range(2, 14))  # 14))
+    # participants = [f"P{p:03d}_TN" for p in paticipants]
+    participants = [f"{p:03d}_TN" for p in paticipants]
+
     # participants = ['P004_TN_SCI']
     p2p_from_file = False
     condition = ["grid", "pseudo"]
@@ -322,7 +331,8 @@ if __name__ == "__main__":
     seed = np.random.randint(0, 100000)
     seed = 10
     # seed = 'test'
-    fold = f"smooth_5_5_{seed}"
+    smoothness = [6, 6]
+    fold = f"smooth_{smoothness[0]}_{smoothness[1]}_{seed}"
     os.makedirs(f"results\{fold}", exist_ok=True)
     # for i in range(batch_number):
     import time
@@ -332,6 +342,7 @@ if __name__ == "__main__":
     for part_name in participants:
         participant = Participant(part_name)
         for m, name in enumerate(condition):
+            smooth = smoothness[0] if name == "pseudo" else smoothness[1]
             maps, target = compute_maps(
                 participant,
                 pseudo=name == "pseudo",
@@ -339,6 +350,7 @@ if __name__ == "__main__":
                 p2p_from_file=p2p_from_file,
                 grid_target_pos=target,
                 seed=seed,
+                smoothness=smooth,
             )
             plot_maps(maps, name=name + f" maps participant {part_name}", fold=fold, muscle_names=muscle_list[:3])
             data_frame = add_to_dataframe(maps, data_frame, part_name, name, muscle_list, fold, seed)
