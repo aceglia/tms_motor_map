@@ -1,7 +1,5 @@
-from csv import excel
 import os
 import numpy as np
-from scipy.spatial import ConvexHull
 import random
 
 import pandas as pd
@@ -96,23 +94,84 @@ def project_point_onto_plane(point, plane_point, plane_normal):
     return point - distance * plane_normal
 
 
-def get_plane_from_points(points, points_to_center=None):
-    if points_to_center is None:
-        centroid = np.mean(points, axis=0)
-    else:
-        centroid = np.mean(points_to_center, axis=0)
-    centroid = np.mean(points, axis=0)
-    centered = points - centroid
+def ransac_plane(points, threshold=0.01, max_iterations=1000):
+    best_inliers = []
+    best_plane = None
+
+    for _ in range(max_iterations):
+        # Randomly sample 3 points to define a plane
+        sample_indices = np.random.choice(points.shape[0], 3, replace=False)
+        p1, p2, p3 = points[sample_indices]
+
+        # Compute the plane normal
+        normal = np.cross(p2 - p1, p3 - p1)
+        normal /= np.linalg.norm(normal)
+
+        # Compute the plane equation: ax + by + cz + d = 0
+        d = -np.dot(normal, p1)
+
+        # Compute distances of all points to the plane
+        distances = np.abs(np.dot(points, normal) + d)
+
+        # Identify inliers
+        inliers = np.where(distances < threshold)[0]
+
+        # Update best plane if this one has more inliers
+        if len(inliers) > len(best_inliers):
+            best_inliers = inliers
+            best_plane = (normal, d)
+
+    return best_plane, best_inliers
+
+
+# import open3d as o3d
+
+# def o3d_ransac_plane(points, threshold=0.01, max_iterations=1000):
+#     pcd = o3d.geometry.PointCloud()
+#     pcd.points = o3d.utility.Vector3dVector(points)
+#     plane_model, inliers = pcd.segment_plane(distance_threshold=threshold, ransac_n=3, num_iterations=max_iterations)
+#     return plane_model, inliers
+
+
+def get_plane_from_points(points, to_center=None):
+
+    centroid_all = np.mean(points, axis=0)
+
+    _, inliers = ransac_plane(
+        points,
+        threshold=3,
+        max_iterations=2000
+    )
+
+    points_plane = points[inliers]
+
+    centroid = np.mean(points_plane, axis=0)
+    centered = points_plane - centroid
+
     _, _, Vt = np.linalg.svd(centered)
 
-    normal = Vt[2]
-    first_dir = Vt[0]  # first principal direction
-    y_axis = np.cross(normal, first_dir)
-    cross_product = np.cross(normal, y_axis)
-    x_axis = -cross_product if np.linalg.det([cross_product, y_axis, normal]) < 0 else cross_product
-    z_axis = normal  # third is the normal
+    x_axis = Vt[0]
+    y_axis = Vt[1]
+    z_axis = Vt[2]
 
-    return (x_axis, y_axis, z_axis), centroid
+    # consistent orientation
+    if np.dot(z_axis, [0, 0, 1]) < 0:
+        z_axis *= -1
+        y_axis *= -1
+
+    # enforce right-handed frame
+    y_axis = np.cross(z_axis, x_axis)
+    y_axis /= np.linalg.norm(y_axis)
+
+    x_axis = np.cross(y_axis, z_axis)
+    x_axis /= np.linalg.norm(x_axis)
+
+    # project global centroid to plane
+    dist = np.dot(z_axis, centroid_all - centroid)
+    to_center = centroid_all if to_center is None else to_center
+    com_new = to_center - dist * z_axis
+
+    return (x_axis, y_axis, z_axis), com_new, inliers
 
 
 def exclude_signal_data(p2p, baseline, n_map):
@@ -173,7 +232,7 @@ def get_mep_from_excel(dir_path, trials, base_name, channel_names=None, exclude_
                 mep_tmp = data_glob[:, mep_idx].astype(float)
                 is_mep = data_glob[:, mep_found_idx] > 0
                 mep_tmp[is_mep == False] = 0
-                # mep_tmp = mep_tmp if not reverse else mep_tmp[::-1]
+                mep_tmp = mep_tmp if not reverse else mep_tmp[::-1]
                 data_mat.append(mep_tmp)
                 frames.append(frames_tmp)
                 nb_files += 1
@@ -219,7 +278,10 @@ def get_area_and_volume(x, y, z, n_tot=2500, area_tot=36):
     # get total area from x and y
     area_tot = (abs(x.min()) + abs(x.max())) * (abs(y.min()) + abs(y.max()))
     area = (len(np.where(z > z.max() * 0.1)[0]) / n_tot) * area_tot
-    volume = (np.sum(z[z > z.max() * 0.1]) - 0.1 * len(np.where(z > z.max() * 0.1)[0]) * z.max()) / (z.max() * area_tot)
+    volume = (np.sum(z[z > z.max() * 0.1]) - 0.1 * len(np.where(z > z.max() * 0.1)[0]) * z.max())
+
+    # area = (len(np.where(z > 50)[0]) / n_tot) * area_tot
+    # volume = (np.sum(z[z > 50]) - 0.1 * len(np.where(z > 50)[0]) * z.max())
     return area, volume
 
 
@@ -320,7 +382,8 @@ class Participant:
             self.return_dir_path(),
             trials,
             channel_names=["FDI", "ext_comm", "sup", "tri", "delt_post"],
-            exclude_mep=True,
+            exclude_mep=False,
             base_name=self.return_excel_file_name(),
+            reverse=pseudo_trial
         )
         return mep_data_file, frame_file

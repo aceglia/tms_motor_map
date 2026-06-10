@@ -1,12 +1,11 @@
-import pandas as pd
-import pingouin as pg
-import matplotlib.pyplot as plt
+from unittest import result
+
+from utils import bland_altman
 import numpy as np
-import seaborn as sns
-
+import pandas as pd
 import os
-
-def main(results_dir):
+if __name__ == '__main__':
+    results_dir = r"D:\Documents\Programmation\tms_motor_map\results\smooth_6_6_0_ransac"
     data_frame = pd.read_csv(os.path.join(results_dir, "maps_characteristics.csv"))
     data_frame = data_frame.loc[data_frame["participant"] != '006_TN']
     muscle_list = list(data_frame['muscle'][:3])
@@ -28,10 +27,12 @@ def main(results_dir):
                 pd_tmp = data_frame.loc[(data_frame['participant'] == participant) & (data_frame['muscle'] == muscle) & (data_frame['condition'] == cond) & (data_frame['map_number'] == list_points_tot[c].index(min_map))]
                 pd_reduced = pd.concat([pd_reduced, pd_tmp], ignore_index=True)
 
-    fig, axes = plt.subplots(1, 4, figsize=(10, 4))
+    # fig, axes = plt.subplots(1, 4, figsize=(10, 4))
+    import matplotlib.pyplot as plt
     comp = ['grid-grid', 'pseudo-pseudo', 'pseudo-grid']
-    rating_title = ['COG-ML', 'COG-AP', 'Area', 'Volume']
-    for r, rating in enumerate(['x_cog', 'y_cog', 'area', 'normalize_volume']):
+    rating_title = ['X-COG', 'Y-COG', 'Area', 'Volume']
+    for r, rating in enumerate(['x_cog', 'y_cog', 'area', 'volume']):
+        plt.figure(figsize=(5, 5), num=f"{comp[c]} - {rating_title[r]}")
         pd_icc_min = pd.DataFrame()
         for c, cond in enumerate(['grid', 'pseudo', 'pseudo']):
             min_map_tmp = pd_reduced.loc[pd_reduced['condition'] == cond]
@@ -43,46 +44,10 @@ def main(results_dir):
                 ref = data_frame.loc[data_frame['condition'] == cond].loc[data_frame['map_number'] == list_points_tot[c].index(list_points_tot[c][-1])] 
             ref['ref'] = 1
             concat_pd = pd.concat([ref, min_map_tmp], ignore_index=True)
+            bland_altman(ref[rating], min_map_tmp[rating], title=f"{comp[c]} - {rating_title[r]}")
             for mus in concat_pd['muscle'].unique():
                 icc_df_min = pg.intraclass_corr(data=concat_pd.loc[concat_pd['muscle'] == mus], targets='participant', raters='ref', ratings=rating, nan_policy='omit').round(2)
-            # icc_df_min = pg.intraclass_corr(data=concat_pd, targets='participant', raters='ref', ratings=rating, nan_policy='omit').round(2)
                 icc_df_min['muscle'] = mus
                 icc_df_min['rating'] = rating
                 icc_df_min['comp'] = comp[c]
                 pd_icc_min = pd.concat([pd_icc_min, icc_df_min], ignore_index=True)
-
-        icc3_min = pd_icc_min.loc[pd_icc_min['Type'] == 'ICC(C,1)']
-        # icc3_min.groupby(['comp', 'rating']).mean(numeric_only=True)
-        ax = axes[r]
-        ax.set_title(rating_title[r], fontsize=18)
-        sns.barplot(x='comp', y='ICC', data=icc3_min, ax=ax, palette="rocket", alpha=0.5, order=comp)
-        # ann = [ax.bar_label(cont, fontsize=14, color=cont.patches[0]._facecolor, padding=40, fmt='%.2f')  for cont in ax.containers[:3]]
-
-        ax.hlines(0.75, ax.get_xlim()[0], ax.get_xlim()[1], colors='green', linestyles='dashed')
-        ax.hlines(0.5, ax.get_xlim()[0], ax.get_xlim()[1], colors='red', linestyles='dashed')
-        ax.set_ylim(0, 1 + 0.1)
-        if r in [0]:
-            ax.set_ylabel('ICC', fontsize=16)
-            ax.tick_params(axis='y', labelrotation=0, labelsize=14)
-        elif r in [1, 2, 3]:
-            ax.set_ylabel('')
-            ax.set_yticklabels([])
-        ax.set_xlabel('')
-        ax.set_xticklabels(['Grid-\nGrid', 'Pseudo-\nPseudo', 'Pseudo-\nGrid'], rotation=0, fontsize=14)
-        sns.despine()
-    # plt.savefig(os.path.join(results_dir, 'ICC.png'))
-    plt.show()
-    plt.close()
-    print('figure saved to', os.path.join(results_dir, 'ICC.png'))
-
-if __name__ == '__main__':
-    seeds = [0]
-    smooth_1 = [6]
-    smooth_2 =  [6]
-    all_folder = []
-    for s in seeds:
-        for s1 in smooth_1:
-            for s2 in smooth_2:
-                all_folder.append(rf"D:\Documents\Programmation\tms_motor_map\results\smooth_{s1}_{s2}_{s}_ransac")
-
-    main(all_folder[0])

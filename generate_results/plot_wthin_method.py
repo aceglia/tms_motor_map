@@ -1,147 +1,9 @@
 import os
-from matplotlib import colors, markers
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import pearsonr
 from biosiglive import load
-
-
-def min_map(grid_data_frame, part, euclid=True, c="grid"):
-    if euclid:
-        cor_coef = grid_data_frame.loc[grid_data_frame['participant'] == part].loc[grid_data_frame['euclid_cog_error'] <= 3.6]
-        # cor_coef = grid_data_frame.loc[grid_data_frame["participant"] == part].loc[
-        #     grid_data_frame["kl_divergence"] <= 2
-        # ]
-    else:
-        cor_coef = grid_data_frame.loc[grid_data_frame["participant"] == part].loc[
-            grid_data_frame["correlation_coefficient"] >= 0.9
-        ]
-    map_list = [np.nan, np.nan, np.nan]
-    if not cor_coef.empty:
-        for m, muscle in enumerate(cor_coef["muscle"].unique()):
-            pd_tmp_muscle = cor_coef.loc[cor_coef["muscle"] == muscle]
-            min_map = pd_tmp_muscle["map_number"].min()
-            map_list[m] = min_map
-    else:
-        return map_list
-    return map_list
-
-
-def recompute_correlation(participants, grid_data_frame, muscle_list):
-    for p in participants:
-        cor_coef = [[np.nan for _ in range(len(muscle_list))]] + [
-            [
-                pearsonr(
-                    grid_data_frame.loc[grid_data_frame["participant"] == p]
-                    .loc[grid_data_frame["map_number"] == i + 1]
-                    .loc[grid_data_frame["muscle"] == m]["zgf_list"]
-                    .values[0]
-                    .flatten(),
-                    grid_data_frame.loc[grid_data_frame["participant"] == p]
-                    .loc[grid_data_frame["map_number"] == i]
-                    .loc[grid_data_frame["muscle"] == m]["zgf_list"]
-                    .values[0]
-                    .flatten(),
-                )[0]
-                for m in muscle_list
-            ]
-            for i in range(len(np.unique(grid_data_frame["map_number"])) - 1)
-        ]
-        grid_data_frame.loc[grid_data_frame["participant"] == p, "correlation_coefficient"] = sum(cor_coef, [])
-    return grid_data_frame
-
-
-def recompute_euclid_dist(participants, grid_data_frame, muscle_list):
-    for p in participants:
-        cog_err_eucl = [[np.nan for _ in range(len(muscle_list))]]
-        cog_err_eucl = cog_err_eucl + [
-            [
-                np.linalg.norm(
-                    np.array(
-                        [
-                            grid_data_frame.loc[grid_data_frame["participant"] == p]
-                            .loc[grid_data_frame["map_number"] == i + 1]
-                            .loc[grid_data_frame["muscle"] == m]["x_cog"],
-                            grid_data_frame.loc[grid_data_frame["participant"] == p]
-                            .loc[grid_data_frame["map_number"] == i + 1]
-                            .loc[grid_data_frame["muscle"] == m]["y_cog"],
-                        ]
-                    )
-                    - np.array(
-                        [
-                            grid_data_frame.loc[grid_data_frame["participant"] == p]
-                            .loc[grid_data_frame["map_number"] == i]
-                            .loc[grid_data_frame["muscle"] == m]["x_cog"],
-                            grid_data_frame.loc[grid_data_frame["participant"] == p]
-                            .loc[grid_data_frame["map_number"] == i]
-                            .loc[grid_data_frame["muscle"] == m]["y_cog"],
-                        ]
-                    ),
-                    axis=0,
-                )[0]
-                for m in muscle_list
-            ]
-            for i in range(len(np.unique(grid_data_frame["map_number"])) - 1)
-        ]
-        grid_data_frame.loc[grid_data_frame["participant"] == p, "euclid_cog_error"] = sum(cog_err_eucl, [])
-    return grid_data_frame
-
-
-def rmse(ref, pred):
-    return np.sqrt(np.mean((ref - pred) ** 2))
-
-
-def recompute_area_error(participants, grid_data_frame, muscle_list):
-    for p in participants:
-        cog_err_eucl = [[np.nan for _ in range(len(muscle_list))]]
-        cog_err_eucl = cog_err_eucl + [
-            [
-                rmse(
-                    np.array(
-                        grid_data_frame.loc[grid_data_frame["participant"] == p]
-                        .loc[grid_data_frame["map_number"] == i + 1]
-                        .loc[grid_data_frame["muscle"] == m]["area"]
-                    ),
-                    np.array(
-                        grid_data_frame.loc[grid_data_frame["participant"] == p]
-                        .loc[grid_data_frame["map_number"] == i]
-                        .loc[grid_data_frame["muscle"] == m]["area"]
-                    ),
-                )
-                for m in muscle_list
-            ]
-            for i in range(len(np.unique(grid_data_frame["map_number"])) - 1)
-        ]
-        grid_data_frame.loc[grid_data_frame["participant"] == p, "area_error"] = sum(cog_err_eucl, [])
-    return grid_data_frame
-
-
-def recompute_volume_error(participants, grid_data_frame, muscle_list):
-    for p in participants:
-        cog_err_eucl = [[np.nan for _ in range(len(muscle_list))]]
-        cog_err_eucl = cog_err_eucl + [
-            [
-                rmse(
-                    np.array(
-                        grid_data_frame.loc[grid_data_frame["participant"] == p]
-                        .loc[grid_data_frame["map_number"] == i + 1]
-                        .loc[grid_data_frame["muscle"] == m]["volume"]
-                    ),
-                    np.array(
-                        grid_data_frame.loc[grid_data_frame["participant"] == p]
-                        .loc[grid_data_frame["map_number"] == i]
-                        .loc[grid_data_frame["muscle"] == m]["volume"]
-                    ),
-                )
-                for m in muscle_list
-            ]
-            for i in range(len(np.unique(grid_data_frame["map_number"])) - 1)
-        ]
-        grid_data_frame.loc[grid_data_frame["participant"] == p, "volume_error"] = sum(cog_err_eucl, [])
-    return grid_data_frame
-
+from utils import *
 
 
 def plot(df, x, y, hue=None, name="", ax=None, pseudo=False, legend=True, palette="rocket"):
@@ -156,7 +18,7 @@ def plot(df, x, y, hue=None, name="", ax=None, pseudo=False, legend=True, palett
         plt.figure(name)
         ax = plt.gca()
     sns.lineplot(
-        df,  # .loc[df["muscle"] == muscle_name[j]],
+        df, #.loc[df["muscle"] == muscle_name[j]],
         x=x,
         y=y,
         hue=hue,
@@ -171,14 +33,14 @@ def plot(df, x, y, hue=None, name="", ax=None, pseudo=False, legend=True, palett
     #     ax[j].get_legend().remove()
     if "correlation" in y:
         ax.axhline(y=0.9, color="r", linestyle="--")
-        ax.set_ylabel("Correlation coefficient")
-        ax.set_xlabel("Number of stimulations")
+        ax.set_ylabel("Correlation coefficient", fontsize=16)
+        ax.set_xlabel("Number of stimulations", fontsize=18)
     if "euclid" in y:
         ax.axhline(y=3.6, color="g", linestyle="--")
-        ax.set_ylabel("Euclidian distance")
+        ax.set_ylabel("Euclidian distance", fontsize=14)
     if "divergence" in y:
-        ax.axhline(y=0.02, color="g", linestyle="--")
-        ax.set_ylabel("KL divergence")
+        ax.axhline(y=0.15, color="g", linestyle="--")
+        ax.set_ylabel("KL divergence", fontsize=16)
     # if pseudo:
     #     ax.set_xticks(list(range(1, 7)))
     #     ax.set_xticklabels([str(i) for i in [44, 64, 94, 124, 154, 184]])
@@ -191,11 +53,12 @@ def plot(df, x, y, hue=None, name="", ax=None, pseudo=False, legend=True, palett
     # plt.savefig(f"{name}.png")
 
 
-if __name__ == "__main__":
-    result_dir = "smooth_5_5_10"
-    data_frame = pd.read_csv(os.path.join(result_dir, "maps_characteristics.csv"))
-
-    data_maps = load(os.path.join(result_dir, "maps_values.bio"), merge=False)[:144]
+def main(args):
+    (path_tmp, df_path, save_path, csv_path) = args
+    if not os.path.exists(path_tmp):
+        path_tmp = path_tmp.replace(".bio", "_test.bio")
+    data_maps = load(path_tmp, merge=False)
+    data_frame = pd.read_csv(df_path)
     data_frame_tot = pd.DataFrame()
     for i in range(len(data_maps)):
         data_frame_tmp = pd.DataFrame(
@@ -218,7 +81,7 @@ if __name__ == "__main__":
     # merge dataframe
     data_frame = pd.merge(data_frame, data_frame_tot, on=["participant", "map_number", "condition", "muscle"])
 
-    data_frame = data_frame.loc[data_frame["participant"] != "P006_TN"]
+    data_frame = data_frame.loc[data_frame["participant"] != "006_TN"]
     participants = data_frame["participant"].unique()
 
     condition = ["grid", "pseudo"]
@@ -274,12 +137,18 @@ if __name__ == "__main__":
         df_cond.loc[df_cond["condition"] == "grid", "map_number"].values + 1
     ) * 49
     # replace 1 by 44, 2 by 64, 3 by 94, 4 by 124, 5 by 154, 6 by 184
-    list_number = [44, 64, 94, 124, 154, 184]
+    # list_number = [44, 64, 94, 124, 154, 184]
+    list_number = [64, 94, 124, 154, 184]
+    list_number = [44, 64, 84, 104, 124, 144, 164, 184]
     df_cond.loc[df_cond["condition"] == "pseudo", "map_number"] = df_cond.loc[
         df_cond["condition"] == "pseudo", "map_number"
     ].apply(lambda x: list_number[x - 1])
     # set svg font to none
     plt.rcParams["svg.fonttype"] = "none"
+    font_base = 16
+    big = font_base + 2
+    bigger = font_base + 4
+    small = font_base - 2
     fig = plt.figure(constrained_layout=True)
     subfigs = fig.subfigures(nrows=1, ncols=2)
     colors = [[0.38092887, 0.12061482, 0.32506528], [0.7965014, 0.10506637, 0.31063031]]
@@ -291,37 +160,42 @@ if __name__ == "__main__":
             for k, key in enumerate(keys):
                 ax = axes[k]
                 if k == 0:
-                    ax.set_title("a) Evolution of errors")
+                    ax.set_title("a) Criteria evolution", fontsize=bigger)
 
                 # create palette with two colors
                 plot(df_cond, "map_number", key, "condition", ax=ax, legend=k == 0, palette=sns.color_palette(colors))
                 if k == 0:
                     handles, labels = ax.get_legend_handles_labels()
-                    ax.legend(handles, ["Grid", "Pseudo"], title="Method", frameon=False)
-
+                    ax.legend(handles, ["Grid", "Pseudo"], title="", frameon=False, fontsize=font_base)
+                # ax.set_yticklabels([np.round(i, 2) for i in ax.get_yticks()], fontsize=small)
+                # ax.set_xticklabels([np.round(i, 2) for i in ax.get_xticks()], fontsize=small)
+                ax.tick_params(axis='x', labelrotation=0, labelsize=small)
+                ax.tick_params(axis='y', labelrotation=0, labelsize=small)
                 # if k == 0:
                 #     colors = [patch.get_edgecolor()[0][:-1].tolist() for patch in ax.collections]
-                if k == 0:
-                    ax_twin = ax.twiny()
-                    ticks_location = ax.get_xticks()
-                    # set ticks as 4 * ticks
-                    ax_twin.set_xticks(np.linspace(df_cond.map_number.min(), df_cond.map_number.max(), 10))
-                    ticks_location = ax_twin.get_xticks()
-                    ax_twin.set_xticklabels([str(np.round((i * 4) / 60, 1)) for i in ticks_location])
-                    # set x ticks label from ax min to ax max
-                    ax_twin.set_xlabel("Time (min)")
-                    ax_twin.set_xlim(ax.get_xlim())
+                # if k == 0:
+                #     ax_twin = ax.twiny()
+                #     ticks_location = ax.get_xticks()
+                #     # set ticks as 4 * ticks
+                #     ax_twin.set_xticks(np.linspace(df_cond.map_number.min(), df_cond.map_number.max(), 10))
+                #     ticks_location = ax_twin.get_xticks()
+                #     ax_twin.set_xticklabels([str(np.round((i * 4) / 60, 1)) for i in ticks_location])
+                #     # set x ticks label from ax min to ax max
+                #     ax_twin.set_xlabel("Time (min)", fontsize = )
+                #     ax_twin.set_xlim(ax.get_xlim())
         else:
             pd_maps = pd.DataFrame()
             for part in participants:
                 for c in condition:
-                    maps_euclid = min_map(df_cond.loc[df_cond["condition"] == c], part, euclid=True, c=cond)
-                    maps_corr = min_map(df_cond.loc[df_cond["condition"] == c], part, euclid=False, c=cond)
+                    maps_euclid = min_map(df_cond.loc[df_cond["condition"] == c], part, key="euclid_cog_error")
+                    maps_kl = min_map(df_cond.loc[df_cond["condition"] == c], part, key="kl_divergence")
+                    maps_corr = min_map(df_cond.loc[df_cond["condition"] == c], part, key="correlation_coefficient")
                     pd_tmp = pd.DataFrame(
                         {
                             "participant": [part] * 3,
                             "condition": [c] * 3,
                             "map_number_euclid": maps_euclid,
+                            "map_number_kl": maps_kl,
                             "correlation_coefficient": maps_corr,
                             "muscle": ["fdi", "ext_comm", "sup"],
                         }
@@ -330,39 +204,100 @@ if __name__ == "__main__":
                         pd_maps = pd_tmp
                     else:
                         pd_maps = pd.concat([pd_maps, pd_tmp], ignore_index=True)
-            pd_maps["min_map_number"] = pd_maps[["map_number_euclid", "correlation_coefficient"]].max(axis=1)
-            # pd_maps["min_map_number"] = pd_maps[["kl_divergence", "correlation_coefficient"]].max(axis=1)
+            # pd_maps["min_map_number"] = pd_maps[["map_number_euclid", "correlation_coefficient"]].max(axis=1)
+            pd_maps["min_map_number"] = pd_maps[["map_number_kl", "correlation_coefficient"]].max(axis=1)
+            pd_maps.to_csv(csv_path)
 
             axes = subfigs[i].subplots(nrows=1, ncols=1)
-            max_value_axis = pd_maps.min_map_number.max() + 50
+            # max_value_axis = pd_maps.min_map_number.max() + 50
             ax = axes
-            ax.set_title("b) Optimal number of stimulation needed")
-            sns.violinplot(y="min_map_number", x="condition", hue="muscle", data=pd_maps, ax=ax, legend=False, cut=0)
+            ax.set_title("b) Optimal number of stimulation needed", fontsize=bigger)
             colors_violin = [
-                colors[0] + [1],
+                colors[0] + [0.8],
                 colors[0] + [0.6],
                 colors[0] + [0.2],
                 colors[1] + [1],
                 colors[1] + [0.6],
                 colors[1] + [0.2],
             ]
-            for p, patch in enumerate(ax.collections):
-                patch.set_facecolor(colors_violin[p])
-            ax.set_ylim(ax.get_ylim()[0], max_value_axis)
-            ax.set_ylabel("Optimal stimulation number")
+            if 'sci' in save_path:
+                sns.barplot(
+                y="min_map_number",
+                x="condition",
+                hue="muscle",
+                data=pd_maps.loc[pd_maps.muscle != 'fdi'],
+                ax=ax,
+                legend=False,
+                gap=0.2,
+                palette=sns.color_palette(colors_violin),
+                )
+                count = 0
+                for c, cont in enumerate(ax.containers):
+                    for patch in cont.patches:
+                        patch.set_facecolor(colors_violin[count])
+                        count += 1
+                pos_x = [-0.2, 0.2, 0.8, 1.2]
+                # pos_y = [175, 175, 130, 130]
+                offset = 20
+                pseudo_pos = pd_maps.loc[pd_maps['condition'] == "pseudo"].min_map_number.max() + offset
+                grid_pos = pd_maps.loc[pd_maps['condition'] == "grid"].min_map_number.max() + offset
+                pos_y = [grid_pos, grid_pos, pseudo_pos, pseudo_pos]
+                text = ["EDC", "SUP", "EDC", "SUP"]
+            else:
+                sns.violinplot(y="min_map_number", x="condition", hue="muscle", data=pd_maps, ax=ax, legend=False, cut=0)
+                for p, patch in enumerate(ax.collections):
+                    patch.set_facecolor(colors_violin[p])
+                pos_x = [-0.27, 0, 0.27, 0.73, 1, 1.27]
+                offset = 20
+                pseudo_pos = pd_maps.loc[pd_maps['condition'] == "pseudo"].min_map_number.max() + offset
+                grid_pos = pd_maps.loc[pd_maps['condition'] == "grid"].min_map_number.max() + offset
+                pos_y = [grid_pos, grid_pos, grid_pos, pseudo_pos, pseudo_pos, pseudo_pos]
+                text = ["FDI", "EDC", "SUP", "FDI", "EDC", "SUP"]
+
+
+            ax.set_ylim(ax.get_ylim()[0], max(pos_y) + 20)
+            ax.set_ylabel("Optimal stimulation number", fontsize=big)
             yticks = ["Grid", "Pseudo-random"]
-            ax.set_xticklabels([yticks[i] for i in ax.get_xticks()])
-            pos_x = [-0.27, 0, 0.27, 0.73, 1, 1.27]
-            pos_y = [260, 260, 260, 130, 130, 130]
-            text = ["FDI", "EXT", "SUP", "FDI", "EXT", "SUP"]
+            ax.set_xticklabels([yticks[i] for i in ax.get_xticks()], fontsize=big)
+            ax.tick_params(axis='y', labelrotation=0, labelsize=small)
+
+            
             for t, te in enumerate(text):
-                ax.text(pos_x[t], pos_y[t], te, ha="center", color=colors_violin[t][:-1] + [1])
-            ax.set_xlabel("Method")
+                ax.text(pos_x[t], pos_y[t], te, ha="center", color=colors_violin[t][:-1] + [1], fontsize=font_base)
+            ax.set_xlabel("")
             # ax_ytwin = ax.twinx()
             # # set ticks as 4 * ticks
             # ax_ytwin.set_yticks(np.linspace(pd_maps.min_map_number.min(), pd_maps.min_map_number.max() + 50, 10))
             # ticks_location = ax_ytwin.get_yticks()
             # ax_ytwin.set_yticklabels([str(np.round((i * 4)/60, 1)) for i in ticks_location])
             # # set x ticks label from ax min to ax max
-            # ax_ytwin.set_ylabel('Time (min)')
-    plt.show()
+            # ax_ytwin.set_ylabel('Time (min)
+    # plt.show()
+    plt.savefig(save_path)
+    print("Figure saved to", save_path)
+    plt.show(block=True)
+
+
+if __name__ == "__main__":
+    seeds = [0]
+    smooth_1 = [6]
+    smooth_2 =  [6]
+    all_folder = []
+    for s in seeds:
+        for s1 in smooth_1:
+            for s2 in smooth_2:
+                all_folder.append(rf"D:\Documents\Programmation\tms_motor_map\results\smooth_{s1}_{s2}_{s}_ransac_sci")
+    # use pool to perform parallel processing
+    args = [
+        (
+            os.path.join(result_dir, "maps_values.bio"),
+            os.path.join(result_dir, "maps_characteristics.csv"),
+            os.path.join(result_dir, "maps_results.png"),
+            os.path.join(result_dir, "maps_min_map.csv")
+        )
+        for result_dir in all_folder
+    ]
+    # ctx = mp.get_context("spawn")
+    # with ctx.Pool(processes=4) as pool:
+    #     pool.map(main, args)
+    main(args[0])

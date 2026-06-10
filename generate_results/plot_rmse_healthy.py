@@ -9,14 +9,19 @@ import os
 def main(results_dir):
     data_frame = pd.read_csv(os.path.join(results_dir, "maps_characteristics.csv"))
     data_frame = data_frame.loc[data_frame["participant"] != '006_TN']
-    muscle_list = list(data_frame['muscle'][:3])
+    muscle_list = list(data_frame['muscle'][:3]) if not "sci" in results_dir else list(data_frame['muscle'][1:3])
     data_frame = data_frame.loc[data_frame['muscle'].isin(muscle_list)]
     list_points_tot = [[49, 98, 147, 196, 245],
                        [24, 44, 64, 84, 104, 124, 144, 164, 184],
                        [24, 44, 64, 84, 104, 124, 144, 164, 184],
                         # [34, 64, 94, 124, 154, 184],
                         # [34, 64, 94, 124, 154, 184]
-                ] 
+                ] if 'sci' not in results_dir else [[49, 98, 147, 196],
+                        # [34, 64, 94, 124, 154, 184],
+                        # [34, 64, 94, 124, 154, 184]
+                        [24, 44, 64, 84, 104, 124, 144, 164, 184],
+                        [24, 44, 64, 84, 104, 124, 144, 164, 184]
+                ]
     min_maps = pd.read_csv(os.path.join(results_dir, "maps_min_map.csv"))
     pd_reduced = pd.DataFrame()
     for i, participant in enumerate(min_maps['participant'].unique()):
@@ -31,7 +36,7 @@ def main(results_dir):
     fig, axes = plt.subplots(1, 4, figsize=(10, 4))
     comp = ['grid-grid', 'pseudo-pseudo', 'pseudo-grid']
     rating_title = ['COG-ML', 'COG-AP', 'Area', 'Volume']
-    for r, rating in enumerate(['x_cog', 'y_cog', 'area', 'normalize_volume']):
+    for r, rating in enumerate(['x_cog', 'y_cog', 'area', 'volume']):
         pd_icc_min = pd.DataFrame()
         for c, cond in enumerate(['grid', 'pseudo', 'pseudo']):
             min_map_tmp = pd_reduced.loc[pd_reduced['condition'] == cond]
@@ -44,23 +49,27 @@ def main(results_dir):
             ref['ref'] = 1
             concat_pd = pd.concat([ref, min_map_tmp], ignore_index=True)
             for mus in concat_pd['muscle'].unique():
-                icc_df_min = pg.intraclass_corr(data=concat_pd.loc[concat_pd['muscle'] == mus], targets='participant', raters='ref', ratings=rating, nan_policy='omit').round(2)
+                icc_df_min = pd.DataFrame()
+                # icc_df_min = pg.intraclass_corr(data=concat_pd.loc[concat_pd['muscle'] == mus], targets='participant', raters='ref', ratings=rating, nan_policy='omit').round(2)
+                # compute rmse for ref 1 and ref 0
+                rmse = np.sqrt(np.nanmean((concat_pd.loc[concat_pd['muscle'] == mus].loc[concat_pd['ref'] == 1][rating].values - concat_pd.loc[concat_pd['muscle'] == mus].loc[concat_pd['ref'] == 0][rating].values) ** 2))
             # icc_df_min = pg.intraclass_corr(data=concat_pd, targets='participant', raters='ref', ratings=rating, nan_policy='omit').round(2)
                 icc_df_min['muscle'] = mus
                 icc_df_min['rating'] = rating
                 icc_df_min['comp'] = comp[c]
+                icc_df_min['rmse'] = rmse
                 pd_icc_min = pd.concat([pd_icc_min, icc_df_min], ignore_index=True)
 
-        icc3_min = pd_icc_min.loc[pd_icc_min['Type'] == 'ICC(C,1)']
+        icc3_min = pd_icc_min.loc[pd_icc_min['Type'] == 'ICC2']
         # icc3_min.groupby(['comp', 'rating']).mean(numeric_only=True)
         ax = axes[r]
         ax.set_title(rating_title[r], fontsize=18)
-        sns.barplot(x='comp', y='ICC', data=icc3_min, ax=ax, palette="rocket", alpha=0.5, order=comp)
+        sns.barplot(x='comp', y='rmse', data=icc3_min, ax=ax, palette="rocket", alpha=0.5, order=comp)
         # ann = [ax.bar_label(cont, fontsize=14, color=cont.patches[0]._facecolor, padding=40, fmt='%.2f')  for cont in ax.containers[:3]]
 
         ax.hlines(0.75, ax.get_xlim()[0], ax.get_xlim()[1], colors='green', linestyles='dashed')
         ax.hlines(0.5, ax.get_xlim()[0], ax.get_xlim()[1], colors='red', linestyles='dashed')
-        ax.set_ylim(0, 1 + 0.1)
+        # ax.set_ylim(0, 1 + 0.1)
         if r in [0]:
             ax.set_ylabel('ICC', fontsize=16)
             ax.tick_params(axis='y', labelrotation=0, labelsize=14)
@@ -83,6 +92,6 @@ if __name__ == '__main__':
     for s in seeds:
         for s1 in smooth_1:
             for s2 in smooth_2:
-                all_folder.append(rf"D:\Documents\Programmation\tms_motor_map\results\smooth_{s1}_{s2}_{s}_ransac")
+                all_folder.append(rf"D:\Documents\Programmation\tms_motor_map\results\smooth_{s1}_{s2}_{s}_ransac_sci")
 
     main(all_folder[0])

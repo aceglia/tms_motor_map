@@ -3,6 +3,7 @@ from scipy.io import loadmat
 from biosiglive.file_io.save_and_load import _read_all_lines, dic_merger
 import numpy as np
 from pygridfit import GridFit, TiledGridFit
+from scipy.signal import correlate
 from map_generator.utils import (
     exclude_outliers,
     get_area_and_volume,
@@ -35,52 +36,51 @@ class MapGenerator:
         baseline = signal_data[baseline_frames[0] : baseline_frames[1], :, :]
         return baseline, mep_data
 
-    @staticmethod
-    def rolling_rms(x, N):
-        xc = np.cumsum(abs(x) ** 2)
-        return np.sqrt((xc[N:] - xc[:-N]) / N)
-
-    def process_mep(self, peak_to_peak, baseline, mep_threeshold=25):
-        for i in range(peak_to_peak.shape[0]):
-            mean = np.nanmean(peak_to_peak[i, :])
-            std = np.nanstd(peak_to_peak[i, :])
-            # mep_values = peak_to_peak[i, peak_to_peak[i, :] * 1e6 > mep_threeshold]
-            mep_values_to_exclude = mean + 3.5 * std
-            peak_to_peak[i, peak_to_peak[i, :] > mep_values_to_exclude] = np.nan
-            # rms_baseline = [self.rolling_rms(baseline[:, i, j], 10) for j in range(baseline.shape[2])]
-            # rms_baseline_mean = [np.nanmean(rms_baseline[j]) for j in range(len(rms_baseline))]
-            # rms_baseline_std = [np.nanstd(rms_baseline[j]) for j in range(len(rms_baseline))]
-        return peak_to_peak
-
-    def process_peaks(self, peak_to_peak, mep_threeshold=None, std_threeshold=3.5, baseline=None):
+    def process_peaks(self, peak_to_peak, mep_threeshold=None, std_threeshold=3.5, baseline=None, lag=None):
         rms_baseline = np.sqrt(np.mean(baseline ** 2, axis=0))
+        mean_base = np.nanmean(rms_baseline, axis=0)
+        std_baseline = np.nanstd(rms_baseline, axis=0)
         if mep_threeshold is not None:
             all_mep = peak_to_peak[peak_to_peak * 1e6 > mep_threeshold]
         else:
             all_mep = peak_to_peak
+        replace_by = np.nan
         mean = np.nanmean(all_mep)
-        std = np.nanstd(all_mep)
-        mep_values_to_exclude = mean + std_threeshold * std
-        peak_to_peak[peak_to_peak > mep_values_to_exclude] = np.nan
-        # peak_to_peak[rms_baseline >  mean + 2 * std] = np.nan
-        # idx = 
-        # peak_to_peak[rms_baseline >  mean - 2 * std] = np.nan
-        # peak_to_peak = self.remove_outliers(peak_to_peak, threshold=1.5)
-        return peak_to_peak
+        std = np.nanstd(all_mep)        
+        lower = mean_base - 2 * std_baseline  
+        upper = mean_base + 2 * std_baseline
+        lower_p2p = mean - std_threeshold * std
+        upper_p2p = mean + std_threeshold * std
 
-    @staticmethod
-    def remove_outliers(data, threshold=1.5):
-        Q1 = np.nanpercentile(data, 25, axis=0)
-        Q3 = np.nanpercentile(data, 75, axis=0)
-        IQR = Q3 - Q1
-        lower_bound = Q1 - (threshold * IQR)
-        upper_bound = Q3 + (threshold * IQR)
-        data[(data < lower_bound) & (data > upper_bound)] = np.nan
-        return data
+        p2p_mask = (rms_baseline >= lower) & (rms_baseline <= upper) & (peak_to_peak >= lower_p2p) & (peak_to_peak <= upper_p2p)
+        peak_to_peak[~p2p_mask] = replace_by
+
+        if peak_to_peak.shape[-1] - np.sum(np.isnan(peak_to_peak)) < 4:
+            peak_to_peak = np.zeros_like(peak_to_peak)
+        # if lag is not None:
+        #     idx_to_remove = np.argwhere(np.abs(lag) > 5)[:, 0]
+        #     idx_mep = np.argwhere(peak_to_peak * 1e6 > 40)
+        #     idx_tot = np.intersect1d(idx_to_remove, idx_mep)
+        #     peak_to_peak[idx_tot] = replace_by
+        return peak_to_peak
 
     def generate_single_map(self, mep_data, baseline, points, n_point_grid, tiled=True, p2p=None, pseudo=False, smoothness=None):
         mep_threeshold = 25
+        mean = np.mean(mep_data[:, :, :], axis=-1)
+        # all_lag = np.ndarray((mep_data.shape[1], mep_data.shape[2]))
+        # for i in range(mep_data.shape[-1]):
+        #     for j in range(mep_data.shape[1]):
+        #         corr = correlate(mep_data[:, j, i], mean[:, j], mode="full")
+        #         # corr = correlate(mep_data[:, 0, i], mean, mode="full")
+        #         lag = np.argmax(corr, axis=0) - (len(mep_data) - 1)
+        #         all_lag[j, i] = (lag / self.data_rate) * 1000
+        all_lag = None
+
         peak_to_peak = np.ptp(mep_data, axis=0) if p2p is None else p2p * 1e-6
+        
+        lag_thres = 5
+        # compute correlation between each mep_data with the mean
+
         # peak_to_peak = self.process_mep(np.ptp(mep_data, axis=0), baseline, mep_threeshold) if p2p is None else p2p
         # peak_to_peak = np.ptp(mep_data, axis=0)
         # import matplotlib.pyplot as plt
@@ -90,6 +90,7 @@ class MapGenerator:
         # plt.axhline(mean + 3.5 * std, color="r")
         # plt.axhline(mean - 3.5 * std, color="r")
         # plt.show()
+        # plt.plot(points[:, 0], points[:, 1])
         x_list, y_list, z_list = [], [], []
         xgf_list, ygf_list, zgf_list = [], [], []
         x_cog_list, y_cog_list = [], []
@@ -100,23 +101,32 @@ class MapGenerator:
         for i in range(peak_to_peak.shape[0]):
             # std_threeshold = 1.5 if ('P009_TN' in self.data_name_base) else 3.5
             std_threeshold = 3.5
-            z = self.process_peaks(peak_to_peak[i, :], mep_threeshold=0, std_threeshold=std_threeshold, baseline=baseline[i, :])
-            x, y = points[:, 0], points[:, 1]
+            z = self.process_peaks(peak_to_peak[i, :], mep_threeshold=None, std_threeshold=std_threeshold, baseline=baseline[:, i, :])
+            x, y = points[:, 0].copy(), points[:, 1].copy()
             z[np.isnan(x) | np.isnan(y)] = np.nan
             x[np.isnan(z)] = np.nan
             y[np.isnan(z)] = np.nan
             x_min, x_max = np.nanmin(x), np.nanmax(x)
             y_min, y_max = np.nanmin(y), np.nanmax(y)
+            # x_min, y_min = -30, -30
+            # x_max, y_max = 30, 30
+            # x = np.clip(x, x_min, x_max)
+            # y = np.clip(y, y_min, y_max)
 
             xi_fit = np.linspace(x_min, x_max, n_point_grid)
             yi_fit = np.linspace(y_min, y_max, n_point_grid)
             # z[np.isnan(z)] = 0
-            if (np.nanmax(z) - np.nanmin(z)) != 0:
-                normalized_z = (z - np.nanmin(z)) / (np.nanmax(z) - np.nanmin(z))
-            elif np.nanmax(z) != 0:
+            # if (np.nanmax(z) - np.nanmin(z)) != 0:
+            #     normalized_z = (z - np.nanmin(z)) / (np.nanmax(z) - np.nanmin(z))
+            #     normalized_z *= 30
+            if np.nanmax(z) != 0:
                 normalized_z = z / np.nanmax(z)
-            else:
-                normalized_z = z
+                normalized_z *= 30
+            # elif np.nanmax(z) != 0:
+            #     normalized_z =  ( z / np.nanmax(z) ) * 30
+            # else:
+            #     normalized_z = z 
+            # normalized_z = z * 1e6
             # to_divide = 1 if np.nanmax(z) == 0 else np.nanmax(z)
             # normalized_z = z / to_divide
             smoothness = smoothness if smoothness is not None else 5
@@ -143,26 +153,40 @@ class MapGenerator:
                     yi_fit,
                     extend="never",
                     smoothness=smoothness,
-                    interp="triangle",
+                    interp="nearest",
                     regularizer="gradient",
                     solver="normal",
+                    autoscale="on",
                 ).fit()
-            zgf = np.clip(gf.zgrid, a_min=0, a_max=gf.zgrid.max())
+            
+            zgf = np.clip(gf.zgrid, a_min=0, a_max=gf.zgrid.max()) / 30
+            # factor = 1e6 
+            # zgf = (zgf - np.nanmin(z * factor)) / (np.nanmax(z * factor) - np.nanmin(z * factor)) if np.nanmax(gf.zgrid) - np.nanmin(gf.zgrid) != 0 else zgf
+
             xgf = gf.xgrid
             ygf = gf.ygrid
 
-            area, volume = get_area_and_volume(
-                xgf.flatten(),
-                ygf.flatten(),
-                zgf.flatten(),
-            )
+            # fig = plt.figure(figsize=(10, 6))
+            # ax = fig.add_subplot(111, projection='3d') # Use projection='3d'
+            # surf = ax.plot_surface(xgf, ygf, zgf, cmap='viridis', edgecolor='none')
+            # plt.show()
+            if np.all(zgf == 0):
+                area, volume = 0, 0
+                x_cog, y_cog = 0, 0
+            else:
+                area, volume = get_area_and_volume(
+                    xgf.flatten(),
+                    ygf.flatten(),
+                    zgf.flatten(),
+                )
+                x_cog, y_cog = get_cog(xgf.flatten(), ygf.flatten(), zgf.flatten())
+
             x_list.append(x)
             y_list.append(y)
             z_list.append(z)
             xgf_list.append(xgf)
             ygf_list.append(ygf)
             zgf_list.append(zgf)
-            x_cog, y_cog = get_cog(xgf.flatten(), ygf.flatten(), zgf.flatten())
             x_cog_list.append(x_cog)
             y_cog_list.append(y_cog)
             area_list.append(area)
@@ -183,17 +207,16 @@ class MapGenerator:
         return map_caracteristics
 
     def get_local_projected_points(self, points, idx_axis_1=None):
-
         (x, y, z), com = get_plane_from_points(points)
         # create plane coordinates system
-        local = np.array([to_plane_coordinates(p, (0, 0, 0), x, y, z) for p in points - com])
+        local = np.array([to_plane_coordinates(p, com, x, y, z) for p in points])
 
-        z_threshold = 2
-        mean_z = np.mean(local[:, 2])
-        std_z = np.std(local[:, 2])
-        idx_excluded_z = np.where(np.abs(local[:, 2]) > mean_z + z_threshold * std_z)
-        mask = np.ones(points.shape[0], dtype=bool)
-        mask[idx_excluded_z[0]] = False
+        # z_threshold = 2
+        # mean_z = np.mean(local[:, 2])
+        # std_z = np.std(local[:, 2])
+        # idx_excluded_z = np.where(np.abs(local[:, 2]) > mean_z + z_threshold * std_z)
+        # mask = np.ones(points.shape[0], dtype=bool)
+        # mask[idx_excluded_z[0]] = False
         point_cleaned = points
 
         plane = get_plane_from_points(point_cleaned)
@@ -254,24 +277,25 @@ class MapGenerator:
                 new_dict = dic_merger(d, new_dict)
             self.all_data.append(new_dict)
 
-            mat_file = file_name.replace('.pkl', '.mat').replace('data_trial_', '')
-            mat_data = self.load_mat_file(mat_file)
-            frames_mat = [v + 1 for v in mat_data[-1]]
-            values = np.swapaxes(mat_data[0], 0, -1)
-            synch_data_path = file_name.replace('data_trial_', 'synch_trial_').replace('.pkl', '.txt')
-            with open(synch_data_path, 'r') as f:
-                frames = [int(row[row.find('Frame ') + len('Frame '):row.find(';')]) for row in f]
-            reordered_values = np.zeros((values.shape[0], values.shape[1], len(frames)))
-            for i, frame in enumerate(frames):
-                idx = frames_mat.index(frame)
-                reordered_values[..., i] = values[:, :, idx]
-            reordered_values = reordered_values[..., ::-1]
-            data_from_mat.append(reordered_values)
+            ## read from mat file instead of pkl file saved from txt file exported via signal in live
+            # mat_file = file_name.replace('.pkl', '.mat').replace('data_trial_', '')
+            # mat_data = self.load_mat_file(mat_file)
+            # frames_mat = [v + 1 for v in mat_data[-1]]
+            # values = np.swapaxes(mat_data[0], 0, -1)
+            # synch_data_path = file_name.replace('data_trial_', 'synch_trial_').replace('.pkl', '.txt')
+            # with open(synch_data_path, 'r') as f:
+            #     frames = [int(row[row.find('Frame ') + len('Frame '):row.find(';')]) for row in f]
+            # reordered_values = np.zeros((values.shape[0], values.shape[1], len(frames)))
+            # for i, frame in enumerate(frames):
+            #     idx = frames_mat.index(frame)
+            #     reordered_values[..., i] = values[:, :, idx]
+            # reordered_values = reordered_values[..., ::-1]
+            # data_from_mat.append(reordered_values)
 
         self.brainsight_data = [new_dict["brainsight_data"] for new_dict in self.all_data]
         self.position = [brainsight_data["position"].reshape(4, 4, -1).T for brainsight_data in self.brainsight_data]
-        # self.signal_data = [new_dict["signal_data"]["data"] for new_dict in self.all_data]
-        self.signal_data = data_from_mat
+        self.signal_data = [new_dict["signal_data"]["data"] for new_dict in self.all_data]
+        # self.signal_data = data_from_mat
         # center signal data
         self.signal_data = [
             signal_data - np.mean(signal_data, axis=0, keepdims=True) for signal_data in self.signal_data
