@@ -1,8 +1,22 @@
 import os
 import numpy as np
 import random
-
 import pandas as pd
+
+def get_idx_to_rotate(target_names):
+    grid_name = target_names[0].split(" ")[0]
+    idx_axis_1 = (
+        np.where(target_names == f"{grid_name} (6, 0)")[0][-1],
+        np.where(target_names == f"{grid_name} (0, 0)")[0][-1],
+    )
+    to_plot = (
+        np.where(target_names == f"{grid_name} (6, 0)")[0][-1],
+        np.where(target_names == f"{grid_name} (0, 0)")[0][-1],
+        np.where(target_names == f"{grid_name} (0, 6)")[0][-1],
+        np.where(target_names == f"{grid_name} (6, 6)")[0][-1],
+    )
+    colors = ["r", "g", "b", "c"]
+    return idx_axis_1, to_plot, colors
 
 
 def project_points_to_plane(points, normal, com):
@@ -51,11 +65,9 @@ def apply_rotation(angle, points):
     return local[:, :2]
 
 
-def rotate_points(points, idx_axis_1=(0, -6), additional_rot=0, ref_axis=[1, 0]):
-    idx_axis_1 = [-1, -6] if idx_axis_1 is None else idx_axis_1
+def rotate_points(points, idx_axis_1, ref_axis=[1, 0]):
     axis_1 = points[idx_axis_1[0], :] - points[idx_axis_1[1], :]
     ref_axis = np.array(ref_axis)
-    # if self.angle is None:
     angle, _ = angle_between_vectors_cross(axis_1, ref_axis)
     rotated_local = apply_rotation(angle, points.copy())
     axis_1 = rotated_local[idx_axis_1[0], :] - rotated_local[idx_axis_1[1], :]
@@ -133,15 +145,11 @@ def ransac_plane(points, threshold=0.01, max_iterations=1000):
 #     return plane_model, inliers
 
 
-def get_plane_from_points(points, to_center=None):
+def get_plane_from_points(points, to_center=None, **kwargs):
 
     centroid_all = np.mean(points, axis=0)
 
-    _, inliers = ransac_plane(
-        points,
-        threshold=3,
-        max_iterations=2000
-    )
+    _, inliers = ransac_plane(points, **kwargs)
 
     points_plane = points[inliers]
 
@@ -274,14 +282,10 @@ def get_cog(x, y, p2p):
     return x_cog, y_cog
 
 
-def get_area_and_volume(x, y, z, n_tot=2500, area_tot=36):
-    # get total area from x and y
+def get_area_and_volume(x, y, z, n_tot=2500):
     area_tot = (abs(x.min()) + abs(x.max())) * (abs(y.min()) + abs(y.max()))
     area = (len(np.where(z > z.max() * 0.1)[0]) / n_tot) * area_tot
-    volume = (np.sum(z[z > z.max() * 0.1]) - 0.1 * len(np.where(z > z.max() * 0.1)[0]) * z.max())
-
-    # area = (len(np.where(z > 50)[0]) / n_tot) * area_tot
-    # volume = (np.sum(z[z > 50]) - 0.1 * len(np.where(z > 50)[0]) * z.max())
+    volume = np.sum(z[z > z.max() * 0.1]) - 0.1 * len(np.where(z > z.max() * 0.1)[0]) * z.max()
     return area, volume
 
 
@@ -344,7 +348,7 @@ class Participant:
             self.pseudo_first = check_order(name)
         self.trials = ["2", "3", "4", "5", "6", "7"]
         if "SCI" in name:
-            self.trials = self.trials[1:]
+            self.trials = self.trials[:]
 
     def return_pkl_file_name(self):
         return rf"data_trial_P{self.name}00{self.return_pseudo_trial()[0]}.pkl"
@@ -357,7 +361,6 @@ class Participant:
         # return rf"D:\Documents\Udem\Postdoctorat\Projet transfert nerveux\data\{self.name}"
 
         # return rf"\\IURDPM\Synapse\1_Recherche\Equipe_Barthelemy\1-Projets\DB_TN24H_TransfertNerveux\3- Raw Data\Healthy\{self.name}\TMS_mapping"
-
 
     def return_excel_file_name(self):
         return rf"P{self.name}_00"
@@ -384,6 +387,6 @@ class Participant:
             channel_names=["FDI", "ext_comm", "sup", "tri", "delt_post"],
             exclude_mep=False,
             base_name=self.return_excel_file_name(),
-            reverse=pseudo_trial
+            reverse=pseudo_trial,
         )
         return mep_data_file, frame_file

@@ -113,8 +113,6 @@ def plot_heatmap(points, mep, ax=None):
 def plot_single_map(
     x, y, zgf, ax=None, n_point_grid=50, x_cog=None, y_cog=None, area=None, volume=None, x_real=None, y_real=None
 ):
-    from scipy.spatial import ConvexHull
-
     if ax is None:
         fig, ax = plt.subplots()
     x_min, x_max = np.nanmin(x), np.nanmax(x)
@@ -132,7 +130,6 @@ def plot_single_map(
         return 0, 0
     # hull_area = ConvexHull(np.array([x, y]).T)
     # plot the points and the convex hull
-    import matplotlib.pyplot as plt
 
     # for simplex in hull_area.simplices:
     #     ax.plot(x[simplex], y[simplex], 'k-')

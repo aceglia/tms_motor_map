@@ -3,14 +3,12 @@ import json
 import os
 import pickle
 import shutil
-import stat
 import threading
 from queue import Queue
 import time
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import (
     QMainWindow,
-    QApplication,
     QFrame,
     QWidget,
     QPlainTextEdit,
@@ -26,7 +24,8 @@ from PyQt5.QtWidgets import (
 import numpy as np
 
 # from app.packet_wrapper import BrainsightWrapper
-from packet_wrapper import BrainsightWrapper
+from .packet_wrapper import BrainsightWrapper
+from .map_widget import MapWindow
 
 
 class LogBox(QPlainTextEdit):
@@ -105,6 +104,9 @@ class App(QMainWindow):
         super().__init__()
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
+        # set max size
+        self.setMaximumSize(300, 200)
+        self.setWindowTitle("Motor map generator")
         self.log_box = LogBox()
         self.log_queue = Queue()
         self._init_layout()
@@ -117,6 +119,7 @@ class App(QMainWindow):
         self.save_directory_base = None
         self.trial_aborted = False
         self.trial_finished = False
+        self.map_widget = MapWindow(parent=self, log_queue=self.log_queue)
         self.target = None
         self.timer = QtCore.QTimer()
         self.brainsight = None
@@ -143,6 +146,7 @@ class App(QMainWindow):
 
         brainsight_layout = self._brainsight_layout()
         signal_layout = self._signal_layout()
+        maps_layout = self._maps_layout()
         load_config_button = QPushButton("Load configuration")
         load_config_button.clicked.connect(self._load_configuration)
         save_configuration = QPushButton("Save configuration")
@@ -160,6 +164,9 @@ class App(QMainWindow):
 
         layout.addWidget(QHLine())
         layout.addLayout(signal_layout)
+
+        layout.addWidget(QHLine())
+        layout.addLayout(maps_layout)
 
         layout.addWidget(QHLine())
         layout.addWidget(QLabel("Log"))
@@ -203,7 +210,7 @@ class App(QMainWindow):
             config = json.load(f)
         self.config_file_name = file_name
         self._from_dict(config)
-        self._set_save_directory()
+        # self._set_save_directory()
 
     def _save_configuration(self):
         if self.config_file_name is None:
@@ -221,7 +228,7 @@ class App(QMainWindow):
             json.dump(self._to_dict(), f, indent=4)
 
     def _brainsight_layout(self):
-        brainsight_label = QLabel("BrainSight")
+        brainsight_label = QLabel("<b><font size=5>BrainSight configuration</font></b>")
         brainsight_adress_label = QLabel("Adress:")
         self.brainsight_adress_input = QLineEdit()
         brainsight_port_label = QLabel("Port:")
@@ -242,7 +249,7 @@ class App(QMainWindow):
         self.prev_target_button.clicked.connect(self.prev_target)
         self.prev_target_button.setEnabled(False)
         layout = QGridLayout()
-        layout.addWidget(brainsight_label, 0, 0, 1, 2)
+        layout.addWidget(brainsight_label, 0, 0, 1, 2, QtCore.Qt.AlignCenter)
         layout.addWidget(brainsight_adress_label, 1, 0)
         layout.addWidget(self.brainsight_adress_input, 1, 1)
         layout.addWidget(
@@ -261,6 +268,21 @@ class App(QMainWindow):
         target_layout.addWidget(self.prev_target_button)
         layout.addLayout(target_layout, 4, 0, 1, 4)
         return layout
+
+    def _maps_layout(self):
+        maps_label = QLabel("<b><font size=5>Maps</font></b>")
+        layout = QVBoxLayout()
+        self.maps_button = QPushButton("Generate maps")
+        self.maps_button.clicked.connect(self.on_maps_clicked)
+        layout.addWidget(maps_label)
+        layout.addWidget(self.maps_button)
+        return layout
+
+    def on_maps_clicked(self):
+        if self.map_widget is None:
+            self.map_widget = MapWindow(parent=self, log_queue=self.log_queue)
+        if not self.map_widget.isVisible():
+            self.map_widget.show()
 
     def generate_targets_config(self):
         target_window = ChildWindow(self)
@@ -299,14 +321,14 @@ class App(QMainWindow):
             time.sleep(0.1)
 
     def _signal_layout(self):
-        signal_label = QLabel("Signal")
+        signal_label = QLabel("<b><font size=5>Signal configuration</font></b>")
         signal_directory = QLabel("Configuration file directory:")
         self.signal_directory_input = QLineEdit()
         signal_directory_button = QPushButton("Browse")
 
         signal_directory_button.clicked.connect(self.browse_folder)
         layout = QGridLayout()
-        layout.addWidget(signal_label, 0, 0, 1, 2)
+        layout.addWidget(signal_label, 0, 0, 1, 2, QtCore.Qt.AlignCenter)
         layout.addWidget(signal_directory, 1, 0)
         layout.addWidget(self.signal_directory_input, 1, 1)
         layout.addWidget(signal_directory_button, 1, 2)
@@ -534,11 +556,3 @@ class App(QMainWindow):
                 shutil.rmtree(os.path.join(self.save_directory_base, "_data_tmp"), ignore_errors=True)
         self.close()
 
-
-if __name__ == "__main__":
-    import sys
-
-    app = QApplication(sys.argv)
-    window = App()
-    window.show()
-    sys.exit(app.exec_())

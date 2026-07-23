@@ -152,7 +152,6 @@ def compute_maps(
         # (x, y, z), com = get_plane_from_points(position) #, position_mat[-1][:, 3, :3])
         # increase weigthing at the corner at index "to_plot"
         if pseudo:
-
             points_weighted = points
             # points_to_add = points[to_plot, :]
             # repeat point to add
@@ -180,7 +179,7 @@ def compute_maps(
         # # check if the point are evenly spread on the area
 
         mep_data_tmp = None if not p2p_from_file else mep_data_tmp
-        map_characteristics_tmp = map_gen.generate_single_map(
+        map_characteristics_tmp = map_gen.compute_map(
             mep_data, baseline, rotated_points, 50, p2p=mep_data_tmp, tiled=False, pseudo=pseudo, smoothness=smoothness
         )
         map_characteristics_tmp.update({"time_to_compute": time.time() - tic})
@@ -209,6 +208,8 @@ def plot_maps(characteristics_list, name="", fold="", muscle_names=None):
         )
         x_cog, y_cog = characteristics["x_cog_list"], characteristics["y_cog_list"]
         area, volume = characteristics["area_list"], characteristics["volume_list"]
+        if ax.ndim == 1:
+            ax = ax[:, np.newaxis]
         for j in idx_muscles:
             # plot_2d_points(local, ax[0, j], colorized_points=(to_plot, colors))
             # plot_2d_points(rotated_points, ax[1, j], colorized_points=(to_plot, colors))
@@ -234,12 +235,12 @@ def plot_maps(characteristics_list, name="", fold="", muscle_names=None):
             if i == 0:
                 ax[i, j].set_title(f"{muscle_names[j]}")
             _ = [a.set_aspect("equal") for a in ax.flatten()]
-            ax[-1, len(x_list) // 2].set_xlabel("antero-posterior (mm)")
+            ax[-1, len(idx_muscles) // 2].set_xlabel("antero-posterior (mm)")
         # ax[len(characteristics_list) // 2, 0].set_ylabel("latero-medial (mm)")
 
     fig.suptitle(f"Map {name}")
     # save figure
-    plt.savefig(rf"D:\Documents\Programmation\tms_motor_map\results\{fold}\maps_characteristics_{name}.png")
+    # plt.savefig(rf"D:\Documents\Programmation\tms_motor_map\results\{fold}\maps_characteristics_{name}.png")
 
 
 def plot_characteristics(characteristics_list, name="", absolutes=False):
@@ -343,10 +344,10 @@ if __name__ == "__main__":
     # participants = [f"P{p:03d}_TN" for p in paticipants]
     participants = [f"{p:03d}_TN" for p in list(range(2, 14))]
 
-    # participants = ['004_TN_SCI']
+    participants = ['004_TN_SCI']
     p2p_from_file = True
     condition = ["grid",'pseudo']
-    muscle_list = ["fdi", "ext_comm", "sup", "tri", "delt_post"]
+    muscle_list = ["fdi"] #, "ext_comm", "sup", "tri", "delt_post"]
     seeds = [0]
         
     smooth_1 = [6] #, 6, 7, 8]
@@ -361,9 +362,9 @@ if __name__ == "__main__":
                 fold = f"smooth_{smoothness[0]}_{smoothness[1]}_{seed}_ransac_tmslyzer"
                 if 'SCI' in participants[0]:
                     fold += '_sci'
-                os.makedirs(f"results\{fold}", exist_ok=True)
-                if os.path.exists(f"results\{fold}\maps_values.bio"):
-                    os.remove(f"results\{fold}\maps_values.bio")
+                # os.makedirs(f"results\{fold}", exist_ok=True)
+                # if os.path.exists(f"results\{fold}\maps_values.bio"):
+                #     os.remove(f"results\{fold}\maps_values.bio")
                 # for i in range(batch_number):
                 import time
 
@@ -383,10 +384,10 @@ if __name__ == "__main__":
                             smoothness=smooth,
                         )
                         plot_maps(maps, name=name + f" maps participant {part_name}", fold=fold, muscle_names=muscle_list[:3])
-                        data_frame = add_to_dataframe(maps, data_frame, part_name, name, muscle_list, fold, seed)
-                        # plt.show()
-                        plt.close()
-                dir_to_save = f"maps_characteristics.csv"
-                data_frame.to_csv(f"results\{fold}\{dir_to_save}")
+                        # data_frame = add_to_dataframe(maps, data_frame, part_name, name, muscle_list, fold, seed)
+                        plt.show()
+                        # plt.close()
+                # dir_to_save = f"maps_characteristics.csv"
+                # data_frame.to_csv(f"results\{fold}\{dir_to_save}")
                     # plt.show()
                 # break

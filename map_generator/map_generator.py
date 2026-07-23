@@ -3,9 +3,10 @@ from scipy.io import loadmat
 from biosiglive.file_io.save_and_load import _read_all_lines, dic_merger
 import numpy as np
 from pygridfit import GridFit, TiledGridFit
-from scipy.signal import correlate
+from map_generator.plot_utils import plot_single_map
 from map_generator.utils import (
-    exclude_outliers,
+    get_idx_to_rotate,
+    project_points_to_plane,
     get_area_and_volume,
     get_cog,
     to_plane_coordinates,
@@ -15,7 +16,7 @@ from map_generator.utils import (
 
 
 class MapGenerator:
-    def __init__(self, data_dir_path, data_name_base, trial_list=(), output_path=None, data_rate=2000):
+    def __init__(self, data_dir_path=None, data_name_base=None, trial_list=(), output_path=None, data_rate=2000):
         self.data_dir_path = data_dir_path
         self.trial_list = trial_list
         self.output_path = output_path
@@ -23,6 +24,9 @@ class MapGenerator:
         self.all_data = []
         self.angle = None
         self.data_rate = data_rate
+        self.n_point_grid = 50
+        self.mep_file_data = None
+        self.map_characteristics = None
 
     def _get_baseline_mep(self, signal_data, stimulation_time, windows):
         center = stimulation_time * self.data_rate
@@ -37,7 +41,7 @@ class MapGenerator:
         return baseline, mep_data
 
     def process_peaks(self, peak_to_peak, mep_threeshold=None, std_threeshold=3.5, baseline=None, lag=None):
-        rms_baseline = np.sqrt(np.mean(baseline ** 2, axis=0))
+        rms_baseline = np.sqrt(np.mean(baseline**2, axis=0))
         mean_base = np.nanmean(rms_baseline, axis=0)
         std_baseline = np.nanstd(rms_baseline, axis=0)
         if mep_threeshold is not None:
@@ -46,13 +50,18 @@ class MapGenerator:
             all_mep = peak_to_peak
         replace_by = np.nan
         mean = np.nanmean(all_mep)
-        std = np.nanstd(all_mep)        
-        lower = mean_base - 2 * std_baseline  
+        std = np.nanstd(all_mep)
+        lower = mean_base - 2 * std_baseline
         upper = mean_base + 2 * std_baseline
         lower_p2p = mean - std_threeshold * std
         upper_p2p = mean + std_threeshold * std
 
-        p2p_mask = (rms_baseline >= lower) & (rms_baseline <= upper) & (peak_to_peak >= lower_p2p) & (peak_to_peak <= upper_p2p)
+        p2p_mask = (
+            (rms_baseline >= lower)
+            & (rms_baseline <= upper)
+            & (peak_to_peak >= lower_p2p)
+            & (peak_to_peak <= upper_p2p)
+        )
         peak_to_peak[~p2p_mask] = replace_by
 
         if peak_to_peak.shape[-1] - np.sum(np.isnan(peak_to_peak)) < 4:
@@ -64,23 +73,10 @@ class MapGenerator:
         #     peak_to_peak[idx_tot] = replace_by
         return peak_to_peak
 
-    def generate_single_map(self, mep_data, baseline, points, n_point_grid, tiled=True, p2p=None, pseudo=False, smoothness=None):
-        mep_threeshold = 25
-        mean = np.mean(mep_data[:, :, :], axis=-1)
-        # all_lag = np.ndarray((mep_data.shape[1], mep_data.shape[2]))
-        # for i in range(mep_data.shape[-1]):
-        #     for j in range(mep_data.shape[1]):
-        #         corr = correlate(mep_data[:, j, i], mean[:, j], mode="full")
-        #         # corr = correlate(mep_data[:, 0, i], mean, mode="full")
-        #         lag = np.argmax(corr, axis=0) - (len(mep_data) - 1)
-        #         all_lag[j, i] = (lag / self.data_rate) * 1000
-        all_lag = None
-
+    def compute_map(
+        self, mep_data, baseline, points, n_point_grid, tiled=True, p2p=None, pseudo=False, smoothness=None
+    ):
         peak_to_peak = np.ptp(mep_data, axis=0) if p2p is None else p2p * 1e-6
-        
-        lag_thres = 5
-        # compute correlation between each mep_data with the mean
-
         # peak_to_peak = self.process_mep(np.ptp(mep_data, axis=0), baseline, mep_threeshold) if p2p is None else p2p
         # peak_to_peak = np.ptp(mep_data, axis=0)
         # import matplotlib.pyplot as plt
@@ -91,17 +87,19 @@ class MapGenerator:
         # plt.axhline(mean - 3.5 * std, color="r")
         # plt.show()
         # plt.plot(points[:, 0], points[:, 1])
+
         x_list, y_list, z_list = [], [], []
         xgf_list, ygf_list, zgf_list = [], [], []
         x_cog_list, y_cog_list = [], []
         area_list = []
         volume_list = []
-        if "SCI" in self.data_name_base and not pseudo:
-            points[points[:, 1] > 34, 1] = np.nan
+        # if "SCI" in self.data_name_base and not pseudo:
+        #     points[points[:, 1] > 34, 1] = np.nan
         for i in range(peak_to_peak.shape[0]):
-            # std_threeshold = 1.5 if ('P009_TN' in self.data_name_base) else 3.5
             std_threeshold = 3.5
-            z = self.process_peaks(peak_to_peak[i, :], mep_threeshold=None, std_threeshold=std_threeshold, baseline=baseline[:, i, :])
+            z = self.process_peaks(
+                peak_to_peak[i, :], mep_threeshold=None, std_threeshold=std_threeshold, baseline=baseline[:, i, :]
+            )
             x, y = points[:, 0].copy(), points[:, 1].copy()
             z[np.isnan(x) | np.isnan(y)] = np.nan
             x[np.isnan(z)] = np.nan
@@ -119,13 +117,14 @@ class MapGenerator:
             # if (np.nanmax(z) - np.nanmin(z)) != 0:
             #     normalized_z = (z - np.nanmin(z)) / (np.nanmax(z) - np.nanmin(z))
             #     normalized_z *= 30
+            scale_value = np.nanmax(np.hstack([x, y]))
             if np.nanmax(z) != 0:
                 normalized_z = z / np.nanmax(z)
-                normalized_z *= 30
+                normalized_z *= scale_value
             # elif np.nanmax(z) != 0:
             #     normalized_z =  ( z / np.nanmax(z) ) * 30
             # else:
-            #     normalized_z = z 
+            #     normalized_z = z
             # normalized_z = z * 1e6
             # to_divide = 1 if np.nanmax(z) == 0 else np.nanmax(z)
             # normalized_z = z / to_divide
@@ -158,9 +157,9 @@ class MapGenerator:
                     solver="normal",
                     autoscale="on",
                 ).fit()
-            
-            zgf = np.clip(gf.zgrid, a_min=0, a_max=gf.zgrid.max()) / 30
-            # factor = 1e6 
+
+            zgf = np.clip(gf.zgrid, a_min=0, a_max=gf.zgrid.max()) / scale_value
+            # factor = 1e6
             # zgf = (zgf - np.nanmin(z * factor)) / (np.nanmax(z * factor) - np.nanmin(z * factor)) if np.nanmax(gf.zgrid) - np.nanmin(gf.zgrid) != 0 else zgf
 
             xgf = gf.xgrid
@@ -175,9 +174,7 @@ class MapGenerator:
                 x_cog, y_cog = 0, 0
             else:
                 area, volume = get_area_and_volume(
-                    xgf.flatten(),
-                    ygf.flatten(),
-                    zgf.flatten(),
+                    xgf.flatten(), ygf.flatten(), zgf.flatten(), n_tot=self.n_point_grid**2
                 )
                 x_cog, y_cog = get_cog(xgf.flatten(), ygf.flatten(), zgf.flatten())
 
@@ -206,29 +203,65 @@ class MapGenerator:
         }
         return map_caracteristics
 
-    def get_local_projected_points(self, points, idx_axis_1=None):
-        (x, y, z), com = get_plane_from_points(points)
-        # create plane coordinates system
-        local = np.array([to_plane_coordinates(p, com, x, y, z) for p in points])
+    def generate_map(
+        self, stimulation_time=1, windows=([50, 5], [18, 40]), n_point_grid=50, smoothness=None, tiled=False, **kwargs
+    ):
+        self.n_point_grid = n_point_grid
+        rotated_points, mep_from_file, signal_data = self.get_projected_points(**kwargs)
+        baseline, mep_data = self._get_baseline_mep(signal_data, stimulation_time=stimulation_time, windows=windows)
+        self.map_characteristics = self.compute_map(
+            mep_data, baseline, rotated_points, n_point_grid, p2p=mep_from_file, tiled=tiled, smoothness=smoothness
+        )
 
-        # z_threshold = 2
-        # mean_z = np.mean(local[:, 2])
-        # std_z = np.std(local[:, 2])
-        # idx_excluded_z = np.where(np.abs(local[:, 2]) > mean_z + z_threshold * std_z)
-        # mask = np.ones(points.shape[0], dtype=bool)
-        # mask[idx_excluded_z[0]] = False
-        point_cleaned = points
+    def get_projected_points(self, **kwargs):
+        points = self.position[:, 3, :3].copy()
+        idx_zero = np.where(np.all(points == 0, axis=1))[0]
+        if len(idx_zero) > 0:
+            points = np.delete(points, idx_zero, axis=0)
+            signal_data = np.delete(self.signal_data, idx_zero, axis=-1)
+            target_names_tmp = np.delete(self.target_names, idx_zero, axis=-1)
+            target_position_tmp = np.delete(self.target_position, idx_zero, axis=-1)
+            if self.mep_file_data is not None:
+                mep_data_tmp = np.delete(self.mep_file_data, idx_zero, axis=-1)
+            else:
+                mep_data_tmp = None
+        else:
+            signal_data = self.signal_data
+            target_names_tmp = self.target_names
+            target_position_tmp = self.target_position
+            mep_data_tmp = self.mep_file_data if self.mep_file_data is not None else None
+        idx_axis_1, _, _ = get_idx_to_rotate(target_names_tmp)
 
-        plane = get_plane_from_points(point_cleaned)
-        local = np.array([to_plane_coordinates(p, (0, 0, 0), x, y, z) for p in point_cleaned - com])
-        rotated_local = rotate_points(local[:, :2], idx_axis_1=idx_axis_1)
-        rotated_local[:, 0] = -rotated_local[:, 0]
+        (x, y, z), com, _ = get_plane_from_points(points, to_center=None, **kwargs)
+        projection = project_points_to_plane(points, z, com)
+        local = np.array([to_plane_coordinates(p, com, x, y, z) for p in projection])
 
-        return rotated_local, idx_excluded_z
+        if np.isnan(local[idx_axis_1, :].sum(axis=1)).any():
+            # replace the points by the target if the points are not available. 
+            # TODO: chose the target on a config file corresponding to the back of the head.
+            proj_target = project_points_to_plane(target_position_tmp[:, 3, :3], z, com)
+            local_target = np.array([to_plane_coordinates(p, com, x, y, z) for p in proj_target])
+            mask = local.copy()
+            mask[~np.isnan(local)] = 1
+            local[idx_axis_1, :] = local_target[idx_axis_1, :]
+            local_changed = True
+        rotated_points = rotate_points(local[:, :2], idx_axis_1=idx_axis_1, additional_rot=0)
+        if local_changed:
+            local_changed = False
+            rotated_points *= mask[:, :2]
+
+        # from map_generator.plot_utils import plot_2d_points
+        # fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True, num="Projected points")
+
+        # plot_2d_points(local, ax[0], colorized_points=(to_plot, colors))
+        # plot_2d_points(local_target, ax[1], colorized_points=(to_plot, colors))
+        # plot_2d_points(local, ax[0], colorized_points=(to_plot, colors))
+        # plot_2d_points(rotated_points, ax[0], colorized_points=(to_plot, colors))
+        return rotated_points, mep_data_tmp, signal_data
 
     def _get_chan_names(self, chaninfo):
         return [str(chaninfo[i][1][0]) for i in range(chaninfo.shape[0])]
-    
+
     def _load_from_wave_data(self, wave_data):
         items = list(wave_data[0][0].dtype.fields.keys())
         chanel_names = self._get_chan_names(wave_data[0][0][items.index("chaninfo")].reshape(-1))
@@ -236,17 +269,17 @@ class MapGenerator:
         array = wave_data[0][0][items.index("values")]
         array = np.swapaxes(array, 0, -1)
         return array, chanel_names, frames
-    
+
     def load_mat_file(self, path):
         try:
             mat_file = loadmat(path)
         except:
-            raise ValueError("Not able to load the .mat file. Try exporting in version 6 or lower of matlab.")           
+            raise ValueError("Not able to load the .mat file. Try exporting in version 6 or lower of matlab.")
         wave_data = [key for key in mat_file.keys() if "wave_data" in key][0]
 
         if len(wave_data) > 0:
             return self._load_from_wave_data(mat_file[wave_data])
-        
+
         else:
             raise ValueError("No recognized data found in the .mat file.")
 
@@ -259,6 +292,7 @@ class MapGenerator:
             min_signal_shape = min(
                 [d["signal_data"]["data"].shape[0] for d in data if d["signal_data"]["data"].shape[0] > 2000]
             )
+
             for d in data:
                 d["signal_data"]["time"] = d["signal_data"]["time"][:min_signal_shape]
                 d["signal_data"]["data"] = d["signal_data"]["data"][:min_signal_shape, :, None]
@@ -271,7 +305,7 @@ class MapGenerator:
             #     shape_value = data[idx_wrong[0]]["signal_data"]["data"].shape[0]
             #     to_fill = min_signal_shape - shape_value
             #     data[idx_wrong[0]]["signal_data"]["data"] = np.concatenate([data[idx_wrong[0]]["signal_data"]["data"], np.zeros((to_fill, 6, 1))], axis=0)
-
+            self.data_rate = 1 / (data[0]["signal_data"]["time"][1, 0] - data[0]["signal_data"]["time"][0, 0])
             new_dict = None
             for d in data:
                 new_dict = dic_merger(d, new_dict)
@@ -303,4 +337,65 @@ class MapGenerator:
         self.target_position = [
             brainsight_data["target_position"].reshape(4, 4, -1).T for brainsight_data in self.brainsight_data
         ]
+        self.target_names = [brainsight_data["target_name"].reshape(-1) for brainsight_data in self.brainsight_data]
         # position, signal_data, target_position = self._exclude_data(position, signal_data, target_position)
+        self._stack_data()
+
+    def _stack_data(self):
+        idx = min(
+            [si.shape[0] for si in self.signal_data]
+        )  # make sure number of sample are the same. Sometime with signal it migth differ
+        self.signal_data = [si[:idx] for si in self.signal_data]
+        self.signal_data = np.concatenate(self.signal_data, axis=-1)
+        self.position = np.concatenate(self.position, axis=0)
+        self.target_position = np.concatenate(self.target_position, axis=0)
+        self.target_names = np.concatenate(self.target_names, axis=0)
+
+    def from_loaded_data(self, loaded_data):
+        self.all_data = loaded_data
+        self.brainsight_data = [new_dict["brainsight_data"] for new_dict in self.all_data]
+        self.position = [brainsight_data["position"].reshape(4, 4, -1).T for brainsight_data in self.brainsight_data]
+        self.signal_data = [new_dict["signal_data"]["data"] for new_dict in self.all_data]
+        # center signal data
+        self.signal_data = [
+            signal_data - np.mean(signal_data, axis=0, keepdims=True) for signal_data in self.signal_data
+        ]
+        self.target_position = [
+            brainsight_data["target_position"].reshape(4, 4, -1).T for brainsight_data in self.brainsight_data
+        ]
+        self.target_names = [brainsight_data["target_name"].reshape(-1) for brainsight_data in self.brainsight_data]
+
+        self.data_rate = 1 / (
+            self.all_data[0]["signal_data"]["time"][1, 0] - self.all_data[0]["signal_data"]["time"][0, 0]
+        )
+        self._stack_data()
+
+    def plot(self, ax=None, show=True):
+        if self.map_characteristics is None:
+            raise ValueError("Map characteristics not computed. Please run generate_map() first.")
+        xgf_list = self.map_characteristics["xgf_list"]
+        ygf_list = self.map_characteristics["ygf_list"]
+        zgf_list = self.map_characteristics["zgf_list"]
+        x_real = self.map_characteristics["x_list"]
+        y_real = self.map_characteristics["y_list"]
+        if ax is None:
+            fig, ax = plt.subplots()
+        for i in range(len(xgf_list)):
+            xgf, ygf, zgf = xgf_list[i], ygf_list[i], zgf_list[i]
+            x_real_i, y_real_i = x_real[i], y_real[i]
+            plot_single_map(
+                xgf,
+                ygf,
+                zgf,
+                ax=ax,
+                n_point_grid=self.n_point_grid,
+                x_cog=None,
+                y_cog=None,
+                area=None,
+                volume=None,
+                x_real=x_real_i,
+                y_real=y_real_i,
+            )
+        if show:
+            plt.show()
+        return ax
