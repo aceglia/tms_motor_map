@@ -128,17 +128,12 @@ def plot_single_map(
     y = y_flat[z_flat > np.max(z_flat) * 0.1]
     if x.size < 4:
         return 0, 0
-    # hull_area = ConvexHull(np.array([x, y]).T)
-    # plot the points and the convex hull
-
-    # for simplex in hull_area.simplices:
-    #     ax.plot(x[simplex], y[simplex], 'k-')
-
     ax.contourf(xi, yi, zgf, n_point_grid, cmap="jet")
     if x_real is not None and y_real is not None:
         ax.scatter(x_real, y_real, s=5, alpha=0.3, marker="o", facecolors="none", edgecolors="k", linewidths=0.5)
     if x_cog is not None and y_cog is not None:
         ax.scatter(x_cog, y_cog, c="k", s=150, marker="x")
+    ax.set_aspect("equal")
 
     # # plot 3D volume
     # fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
@@ -168,10 +163,11 @@ def plot_map(x_y_z, n_point_grid=50):
 def plot_2d_points(points, ax=None, color="k", colorized_points=None):
     if ax is None:
         fig, ax = plt.subplots()
-
     ax.scatter(points[:, 0], points[:, 1], color=color)
+    colors = ["r", "g", "b", "c"]
     if colorized_points is not None:
-        idxs, colors = colorized_points
-        _ = [ax.scatter(points[idxs[i], 0], points[idxs[i], 1], color=colors[i]) for i in range(len(idxs))]
+        names, idxs = colorized_points
+        _ = [ax.scatter(points[idxs[i], 0], points[idxs[i], 1], color=colors[i], label=names[i]) for i in range(len(idxs))]
     ax.set_aspect("equal")
+    ax.legend()
     return ax

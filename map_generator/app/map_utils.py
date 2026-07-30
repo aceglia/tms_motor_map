@@ -1,44 +1,185 @@
+import json
 import os
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QGridLayout, QMainWindow, QFileDialog, QComboBox, QLineEdit, QCheckBox, QTableWidget, QTableWidgetItem, QDialog
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtWidgets import QWidget, QPushButton, QGridLayout, QCheckBox, QTableWidget, QTableWidgetItem, QDialog, QLineEdit, QLabel
+
 import numpy as np
 import pandas as pd
 
 from ..map_generator import MapGenerator
 
 
-class MapOptions:
+class MapOptions(QDialog):
     def __init__(self):
-        self.smoothness = 5
-        self.grid_points = 50
-        self.std_factor_mep = 3.5
-        self.std_factor_baseline = 2.0
+        super().__init__()  
+        self.setWindowTitle("Map Options")
+        self._smoothness = 5
+        self._grid_points = 50
+        self._std_factor_mep = 3.5
+        self._std_factor_baseline = 2.0
         self.ransac = True
         self.ransac_threshold = 1.0
         self.ransac_iterations = 1000
-        self.simulation_time = 1
-        self.baseline_window = [50, 5]
-        self.mep_window = [18, 40]
+        self._simulation_time = 1
+        self._baseline_window = [50, 5]
+        self._mep_window = [18, 40]
+        self._target_to_align = ['(6, 0)', '(0, 0)']
+        self.tile = False
+        self.extend = "never"
+        self.interp = "nearest"
+        self.regularizer = "gradient"
+        self.solver = "normal"
+        self.autoscale = "on"
+        self.smoothness_input = None
+        self.grid_points_input = None
+        self.std_factor_mep_input = None
+        self.std_factor_baseline_input = None
+        self.simulation_time_input = None
+        self.baseline_window_input = None
+        self.mep_window_input = None
+        self.target_to_align_input = None
+        self._create_layout()
 
     def to_dict(self):
         return {
-            "smoothness": self.smoothness,
-            "grid_points": self.grid_points,
-            "std_factor_mep": self.std_factor_mep,
-            "std_factor_baseline": self.std_factor_baseline,
-            "ransac": self.ransac,
-            "ransac_threshold": self.ransac_threshold,
-            "ransac_iterations": self.ransac_iterations,
-            "simulation_time": self.simulation_time,
-            "baseline_window": self.baseline_window,
-            "mep_window": self.mep_window,
+            "mep_analysis": {
+                "std_factor_mep": self.std_factor_mep,
+                "std_factor_baseline": self.std_factor_baseline,
+                "simulation_time": self.simulation_time,
+                "baseline_window": self.baseline_window,
+                "mep_window": self.mep_window,
+            },
+            "grid_fitting": {
+                "tile": self.tile,
+                "extend": self.extend,
+                "interp": self.interp,
+                "regularizer": self.regularizer,
+                "solver": self.solver,
+                "autoscale": self.autoscale,
+                "smoothness": self.smoothness,
+                "n_points": self.grid_points,
+            },
+            "plane_projection": {
+                "ransac": self.ransac,
+                "ransac_threshold": self.ransac_threshold,
+                "ransac_iterations": self.ransac_iterations,
+                "target_to_align": self.target_to_align,
+            },
         }
 
     def from_dict(self, options_dict):
         for key in options_dict:
             if hasattr(self, key):
                 setattr(self, key, options_dict[key])
+        self._init_layout()
+
+    def save_file(self, file_path):
+        options_dict = self.to_dict()
+        try:
+            with open(file_path, 'w') as f:
+                json.dump(options_dict, f, indent=4)
+        except Exception as e:
+            print(f"Error saving options to file: {e}")
+        
+    def load_file(self, file_path):
+        try:
+            with open(file_path, 'r') as f:
+                options_dict = json.load(f)
+            self.from_dict(options_dict)
+        except Exception as e:
+            print(f"Error loading options from file: {e}")
+
+    def _create_layout(self):
+        layout = QGridLayout()
+        self.smoothness_input = QLineEdit(str(self._smoothness))
+        self.grid_points_input = QLineEdit(str(self._grid_points))
+        self.std_factor_mep_input = QLineEdit(str(self._std_factor_mep))
+        self.std_factor_baseline_input = QLineEdit(str(self._std_factor_baseline))
+        self.simulation_time_input = QLineEdit(str(self._simulation_time))
+        self.baseline_window_input = (QLineEdit(str(self._baseline_window[0])), QLineEdit(str(self._baseline_window[1])))
+        self.mep_window_input = (QLineEdit(str(self._mep_window[0])), QLineEdit(str(self._mep_window[1])))
+        self.target_to_align_input = (QLineEdit(str(self._target_to_align[0])), QLineEdit(str(self._target_to_align[1])))
+        self.ok_button = QPushButton("OK")
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        layout.addWidget(QLabel("Smoothness"), 0, 0)
+        layout.addWidget(self.smoothness_input, 0, 1)
+        layout.addWidget(QLabel("Grid points"), 1, 0)
+        layout.addWidget(self.grid_points_input, 1, 1)
+        layout.addWidget(QLabel("Std factor MEP"), 2, 0)
+        layout.addWidget(self.std_factor_mep_input, 2, 1)
+        layout.addWidget(QLabel("Std factor baseline"), 3, 0)
+        layout.addWidget(self.std_factor_baseline_input, 3, 1)
+        layout.addWidget(QLabel("Simulation time (s)"), 4, 0)
+        layout.addWidget(self.simulation_time_input, 4, 1)
+        layout.addWidget(QLabel("Baseline window (ms)"), 5, 0)
+        layout.addWidget(self.baseline_window_input[0], 5, 1)
+        layout.addWidget(self.baseline_window_input[1], 5, 2)
+        layout.addWidget(QLabel("MEP window (ms)"), 6, 0)
+        layout.addWidget(self.mep_window_input[0], 6, 1)
+        layout.addWidget(self.mep_window_input[1], 6, 2)
+        layout.addWidget(QLabel("Target to align (format: (i, j))"), 7, 0)
+        layout.addWidget(self.target_to_align_input[0], 7, 1)
+        layout.addWidget(self.target_to_align_input[1], 7, 2)
+        layout.addWidget(self.ok_button, 8, 0)
+        layout.addWidget(self.cancel_button, 8, 1)
+        self.setLayout(layout)
+
+    def _init_layout(self, option_dic=None):
+        if option_dic is not None:
+            self.from_dict(option_dic)
+        self.smoothness_input.setText(str(self._smoothness))
+        self.grid_points_input.setText(str(self._grid_points))
+        self.std_factor_mep_input.setText(str(self._std_factor_mep))
+        self.std_factor_baseline_input.setText(str(self._std_factor_baseline))
+        self.simulation_time_input.setText(str(self._simulation_time))
+        self.baseline_window_input[0].setText(str(self._baseline_window[0]))
+        self.baseline_window_input[1].setText(str(self._baseline_window[1]))
+        self.mep_window_input[0].setText(str(self._mep_window[0]))
+        self.mep_window_input[1].setText(str(self._mep_window[1]))
+        self.target_to_align_input[0].setText(str(self._target_to_align[0]))
+        self.target_to_align_input[1].setText(str(self._target_to_align[1]))
+
+    @property
+    def smoothness(self):
+        return self._smoothness if self.smoothness_input is None else float(self.smoothness_input.text())
+
+    @property
+    def grid_points(self):
+        return self._grid_points if self.grid_points_input is None else int(self.grid_points_input.text())
+
+    @property
+    def std_factor_mep(self):
+        return self._std_factor_mep if self.std_factor_mep_input is None else float(self.std_factor_mep_input.text())
+
+    @property
+    def std_factor_baseline(self):
+        return self._std_factor_baseline if self.std_factor_baseline_input is None else float(self.std_factor_baseline_input.text())
+
+    @property
+    def simulation_time(self):
+        return self._simulation_time if self.simulation_time_input is None else float(self.simulation_time_input.text())
+
+    @property
+    def mep_window(self):
+        if self.mep_window_input is None:
+            return self._mep_window
+        else:
+            return [int(self.mep_window_input[0].text()), int(self.mep_window_input[1].text())]
+
+    @property
+    def baseline_window(self):
+        if self.baseline_window_input is None:
+            return self._baseline_window
+        else:
+            return [int(self.baseline_window_input[0].text()), int(self.baseline_window_input[1].text())]
+
+    @property
+    def target_to_align(self):
+        if self.target_to_align_input is None:
+            return self._target_to_align
+        else:
+            return str((self.target_to_align_input[0].text()), (self.target_to_align_input[1].text()))
 
 
 class Map:
@@ -52,16 +193,17 @@ class Map:
         self.files = files if files is not None else []
         self.generator = MapGenerator()
 
+
     def set_data(self, data):
         muscle_idx = data[0]["signal_data"]["chanel_names"].index(self.muscle_name)
         data_reduced = []
         for d in data:
-            d_reduced = {'signal_data': {}, 'brainsight_data': d['brainsight_data']}
-            for key in d['signal_data']:
-                if key == 'data':
-                    d_reduced['signal_data']['data'] =  d['signal_data']['data'][:, muscle_idx:muscle_idx + 1, :]
+            d_reduced = {"signal_data": {}, "brainsight_data": d["brainsight_data"]}
+            for key in d["signal_data"]:
+                if key == "data":
+                    d_reduced["signal_data"]["data"] = d["signal_data"]["data"][:, muscle_idx : muscle_idx + 1, :]
                 else:
-                    d_reduced['signal_data'][key] = d['signal_data'][key]
+                    d_reduced["signal_data"][key] = d["signal_data"][key]
             data_reduced.append(d_reduced)
         self.generator.from_loaded_data(data_reduced)
         self.exclusions.init(self.generator.all_data)
@@ -73,7 +215,7 @@ class Map:
             windows=(self.options.baseline_window, self.options.mep_window),
             n_point_grid=self.options.grid_points,
             smoothness=self.options.smoothness,
-            tiled=False, 
+            tiled=False,
             threshold=self.options.ransac_threshold,
             max_iterations=self.options.ransac_iterations,
         )
@@ -87,7 +229,7 @@ class Map:
         data_frame_tmp["area"] = char["area_list"]
         data_frame_tmp["volume"] = char["volume_list"]
         data_frame_tmp["nb_sites"] = self.positions
-        data_frame_tmp['file_used'] = [self.files]
+        data_frame_tmp["file_used"] = [self.files]
         # data_frame_tmp["options"] = [self.options.to_dict()]
         # data_frame_tmp["exclusions"] = [self.exclusions.get_exclusion_info(i) for i in range(len(self.files))]
         return data_frame_tmp
@@ -96,14 +238,18 @@ class Map:
         data_frame_tmp = self._get_map_characteristics_pd()
         data_frame_tmp.to_csv(file_path, index=False)
 
-    def plot(self, ax=None):
-        self.generator.plot(ax=ax, show=False)
+    def plot(self, ax=None, show_projection=False):
+        if not show_projection:
+            self.generator.plot(ax=ax, show=False)
+        else:
+            self.generator.plot_projection(ax=ax, show=False)
 
 
 class FilesHandler(QWidget):
     """
-    Class to handle files used for generating the maps. 
+    Class to handle files used for generating the maps.
     """
+
     def __init__(self, parent, files=None):
         self.parent = parent
         self._files = files
@@ -161,7 +307,7 @@ class FilesHandler(QWidget):
         for i in range(self.table_widget.rowCount()):
             self.table_widget.removeRow(i)
         self.table_widget.setRowCount(0)
-    
+
     def _remove_row(self):
         row_index = self.table_widget.currentRow()
         self.table_widget.removeRow(row_index)
@@ -173,7 +319,7 @@ class FilesHandler(QWidget):
             if item is not None:
                 files.append(item.text())
         return files
-            
+
     @property
     def files(self):
         return self.get_files()
@@ -196,22 +342,28 @@ class Exclusion:
         return signal_data, brainsight_data
 
     def init(self, all_data):
-        self.signal_frames = [d['signal_data']['frame_number'] for d in all_data]
-        self.brainsight_samples = [d['brainsight_data']['name'] for d in all_data]
+        self.signal_frames = [d["signal_data"]["frame_number"] for d in all_data]
+        self.brainsight_samples = [d["brainsight_data"]["name"] for d in all_data]
         self.excluded_frame = [[False for _ in self.signal_frames[i]] for i in range(len(self.signal_frames))]
-        self.excluded_sample = [[False for _ in self.brainsight_samples[i]] for i in range(len(self.brainsight_samples))]
+        self.excluded_sample = [
+            [False for _ in self.brainsight_samples[i]] for i in range(len(self.brainsight_samples))
+        ]
 
     def get_exclusion_info(self, idx):
         file_info = {
             "signal_frames": self.signal_frames[idx],
             "brainsight_samples": self.brainsight_samples[idx],
-            "checkboxes": [{"remove_mep": self.excluded_frame[idx][j], "remove_site": self.excluded_sample[idx][j]} for j in range(len(self.signal_frames[idx]))]
+            "checkboxes": [
+                {"remove_mep": self.excluded_frame[idx][j], "remove_site": self.excluded_sample[idx][j]}
+                for j in range(len(self.signal_frames[idx]))
+            ],
         }
         return file_info
 
     def set_exclusion_info(self, infos, idx):
-        self.excluded_frame[idx] = [info["remove_mep"] for info in infos['checkboxes']]
-        self.excluded_sample[idx] = [info["remove_site"] for info in infos['checkboxes']]
+        self.excluded_frame[idx] = [info["remove_mep"] for info in infos["checkboxes"]]
+        self.excluded_sample[idx] = [info["remove_site"] for info in infos["checkboxes"]]
+
 
 class SiteModificationPopup(QDialog):
     def __init__(self, parent):
@@ -241,16 +393,16 @@ class SiteModificationPopup(QDialog):
     def _populate_table(self, files_info):
         self.table_widget.clearContents()
         self.table_widget.setRowCount(0)
-        for frame, pos in zip(files_info['signal_frames'], files_info['brainsight_samples']):
+        for frame, pos in zip(files_info["signal_frames"], files_info["brainsight_samples"]):
             row_index = self.table_widget.rowCount()
-            self.table_widget.insertRow(row_index)            
+            self.table_widget.insertRow(row_index)
             self.table_widget.setItem(row_index, 0, QTableWidgetItem(f"{frame}/{pos}"))
             remove_mep_checkbox = QCheckBox()
             remove_site_checkbox = QCheckBox()
             remove_site_checkbox.toggled.connect(remove_mep_checkbox.setChecked)
-            if files_info['checkboxes']:
-                remove_mep_checkbox.setChecked(files_info['checkboxes'][row_index]["remove_mep"])
-                remove_site_checkbox.setChecked(files_info['checkboxes'][row_index]["remove_site"])
+            if files_info["checkboxes"]:
+                remove_mep_checkbox.setChecked(files_info["checkboxes"][row_index]["remove_mep"])
+                remove_site_checkbox.setChecked(files_info["checkboxes"][row_index]["remove_site"])
             self.table_widget.setCellWidget(row_index, 1, remove_mep_checkbox)
             self.table_widget.setCellWidget(row_index, 2, remove_site_checkbox)
 
@@ -259,9 +411,11 @@ class SiteModificationPopup(QDialog):
         for i in range(self.table_widget.rowCount()):
             item = self.table_widget.item(i, 0)
             if item is not None:
-                file_info['signal_frames'].append(item.text().split("/")[0])
-                file_info['brainsight_samples'].append(item.text().split("/")[1])
+                file_info["signal_frames"].append(item.text().split("/")[0])
+                file_info["brainsight_samples"].append(item.text().split("/")[1])
                 remove_mep_checkbox = self.table_widget.cellWidget(i, 1)
                 remove_site_checkbox = self.table_widget.cellWidget(i, 2)
-                file_info['checkboxes'].append({"remove_mep": remove_mep_checkbox.isChecked(), "remove_site": remove_site_checkbox.isChecked()})
+                file_info["checkboxes"].append(
+                    {"remove_mep": remove_mep_checkbox.isChecked(), "remove_site": remove_site_checkbox.isChecked()}
+                )
         return file_info

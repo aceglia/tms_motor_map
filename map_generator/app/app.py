@@ -234,6 +234,8 @@ class App(QMainWindow):
         brainsight_port_label = QLabel("Port:")
         self.brainsight_port_input = QLineEdit()
         self.brainsight_port_input.setText("60000")
+        self.brainsight_test_button = QPushButton("Test connection")
+        self.brainsight_test_button.clicked.connect(self.test_brainsight_connection)
         self.targets_config_label = QLabel("Targets configuration file:")
         self.targets_config_input = QLineEdit()
         self.targets_config_generation_button = QPushButton("Generate for grid")
@@ -258,15 +260,16 @@ class App(QMainWindow):
             0,
         )
         layout.addWidget(self.brainsight_port_input, 2, 1)
-        layout.addWidget(self.targets_config_label, 3, 0)
-        layout.addWidget(self.targets_config_input, 3, 1)
-        layout.addWidget(self.targets_config_button, 3, 2)
-        layout.addWidget(self.targets_config_generation_button, 3, 3)
+        layout.addWidget(self.brainsight_test_button, 3, 3)
+        layout.addWidget(self.targets_config_label, 4, 0)
+        layout.addWidget(self.targets_config_input, 4, 1)
+        layout.addWidget(self.targets_config_button, 4, 2)
+        layout.addWidget(self.targets_config_generation_button, 4, 3)
         target_layout = QHBoxLayout()
         target_layout.addWidget(self.target_checkbox)
         target_layout.addWidget(self.next_target_button)
         target_layout.addWidget(self.prev_target_button)
-        layout.addLayout(target_layout, 4, 0, 1, 4)
+        layout.addLayout(target_layout, 5, 0, 1, 4)
         return layout
 
     def _maps_layout(self):
@@ -277,6 +280,22 @@ class App(QMainWindow):
         layout.addWidget(maps_label)
         layout.addWidget(self.maps_button)
         return layout
+
+    def test_brainsight_connection(self):
+        if self.brainsight is None:
+            self.brainsight = BrainsightWrapper(
+                self.brainsight_adress_input.text(), self.brainsight_port_input.text(), timeout=1, logbox=self.log_queue
+            )
+            self.sample_event = self.brainsight.sample_event
+
+        if not self.brainsight.is_connected():
+            try:
+                self.brainsight.connect()
+                self.print_log(f"SUCCESS: Connected to Brainsight at: {self.brainsight_adress_input.text()}:{self.brainsight_port_input.text()}")
+            except Exception as e:
+                self.print_log(f"Error connecting to Brainsight: {e}")
+        else:
+            self.print_log(f"SUCCESS: Already connected to Brainsight at: {self.brainsight_adress_input.text()}:{self.brainsight_port_input.text()}")
 
     def on_maps_clicked(self):
         if self.map_widget is None:
@@ -306,7 +325,7 @@ class App(QMainWindow):
             if new_files:
                 seen_files = current_files
                 self.last_signal_file = new_files.pop()
-                self.print_log(f"New file detetcted in signal directory {self.last_signal_file}")
+                self.print_log(f"New file detected in signal directory {self.last_signal_file}")
                 self.new_file_event.set()
                 if "finished" in self.last_signal_file:
                     self.sample_event.set()
@@ -444,7 +463,7 @@ class App(QMainWindow):
                 )
             except Exception as e:
                 self.print_log(f"CONNECTION: Error connecting to BrainSight - {e}")
-                self.stop()
+                # self.stop()
                 return
 
         self.load_targets_config()

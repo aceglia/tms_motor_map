@@ -1,22 +1,46 @@
 import os
+import re
 import numpy as np
 import random
 import pandas as pd
 
 def get_idx_to_rotate(target_names):
     grid_name = target_names[0].split(" ")[0]
+
+    coords = []
+    for name in target_names:
+        m = re.search(r"\((\d+),\s*(\d+)\)", name)
+        if m:
+            coords.append((int(m.group(1)), int(m.group(2))))
+
+    coords = np.array(coords)
+
+    i_min, i_max = coords[:, 0].min(), coords[:, 0].max()
+    j_min, j_max = coords[:, 1].min(), coords[:, 1].max()
+
+    corners = [
+        f"{grid_name} ({i_min}, {j_min})",
+        f"{grid_name} ({i_max}, {j_min})",
+        f"{grid_name} ({i_min}, {j_max})",
+        f"{grid_name} ({i_max}, {j_max})",
+    ]
+    corners_names = [
+        f"({i_min}, {j_min})",
+        f"({i_max}, {j_min})",
+        f"({i_min}, {j_max})",
+        f"({i_max}, {j_max})",
+    ]
+    
+    corners_idx = tuple(
+        np.where(target_names == corner)[0][-1]
+        for corner in corners
+    )
+
     idx_axis_1 = (
-        np.where(target_names == f"{grid_name} (6, 0)")[0][-1],
-        np.where(target_names == f"{grid_name} (0, 0)")[0][-1],
+        corners_idx[1],  # (i_max, j_min)
+        corners_idx[0],  # (i_min, j_min)
     )
-    to_plot = (
-        np.where(target_names == f"{grid_name} (6, 0)")[0][-1],
-        np.where(target_names == f"{grid_name} (0, 0)")[0][-1],
-        np.where(target_names == f"{grid_name} (0, 6)")[0][-1],
-        np.where(target_names == f"{grid_name} (6, 6)")[0][-1],
-    )
-    colors = ["r", "g", "b", "c"]
-    return idx_axis_1, to_plot, colors
+    return idx_axis_1, (corners_names, corners_idx)
 
 
 def project_points_to_plane(points, normal, com):
@@ -145,13 +169,17 @@ def ransac_plane(points, threshold=0.01, max_iterations=1000):
 #     return plane_model, inliers
 
 
-def get_plane_from_points(points, to_center=None, **kwargs):
+def get_plane_from_points(points, to_center=None, ransac=True, **kwargs):
 
     centroid_all = np.mean(points, axis=0)
 
-    _, inliers = ransac_plane(points, **kwargs)
+    points_plane = points.copy()
+    inliers = np.arange(points.shape[0])
 
-    points_plane = points[inliers]
+    if ransac:
+        _, inliers = ransac_plane(points, **kwargs)
+
+        points_plane = points[inliers]
 
     centroid = np.mean(points_plane, axis=0)
     centered = points_plane - centroid

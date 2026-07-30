@@ -13,6 +13,7 @@ var started% := 0;
 var duplicate%;
 var file_name$;
 var success% := 1;
+var dir$;
 
 'Set up toolbar
 ToolbarSet(2, "Export to file", Start%);
@@ -28,9 +29,9 @@ data% := SampleHandle(0);
 duplicate% := WindowDuplicate();
 View(duplicate%);
 file_name$ := FileName$(3) + FileName$(4);
+dir$ := FileName$(-1);
 WindowVisible(0);
 FrontView(data%);
-'View(data%);
 frameCount% := FrameCount();
 ToolbarSet(0,"Idle",Idle%);		'Sey Idle routine to monitor data
 ToolbarEnable(2, 0);
@@ -40,7 +41,7 @@ end;
 'Idle routine to monitor when sweep is taking place and "beep"
 Func Idle%()
 if ViewKind(duplicate%) = -2 then
-    FileExportAs( "_data_tmp\\"  + file_name$ + ".aborted" + ".txt" ,1,1);
+    FileExportAs( dir$ + "_data_tmp\\" + file_name$ + ".aborted" + ".txt" ,1,1);
     FileClose();
     Halt;
 endif;
@@ -50,18 +51,18 @@ if frameCount% <> FrameCount() then
     started% := 1;
     frameCount% := FrameCount();
     frame% := Frame(FrameCount());
-    ExportChanList(-1);
+    ExportChanList("3..19");
     ExportFrameList(frameCount%);
-    success% := FileExportAs( "_data_tmp\\"  + file_name$  + ".data_frame_" + Str$(frameCount%) + ".txt" ,1,1);
+    success% := FileExportAs( dir$ + "_data_tmp\\" + file_name$  + ".data_frame_" + Str$(frameCount%) + ".txt", 1, 1);
     printlog(success%);
     if success% <> 0 then
-        Message("ERROR|Not able to save data. Verify if the path exists.");
+        Message("ERROR|Not able to save data. Verify if the path exists. Run the reccording app before starting the signal reccording");
         Halt;
     endif;
 endif;
 if started% = 1 then
    if SampleStatus() = -1 then 
-        FileExportAs( "_data_tmp\\"  + file_name$  + ".finished" + ".txt" ,1,1);
+        FileExportAs( dir$ + "_data_tmp\\"  + file_name$  + ".finished" + ".txt" ,1,1);
         FileClose();
         Halt;
     endif;

@@ -3,7 +3,8 @@ from scipy.io import loadmat
 from biosiglive.file_io.save_and_load import _read_all_lines, dic_merger
 import numpy as np
 from pygridfit import GridFit, TiledGridFit
-from map_generator.plot_utils import plot_single_map
+from map_generator.plot_utils import plot_single_map, plot_2d_points
+
 from map_generator.utils import (
     get_idx_to_rotate,
     project_points_to_plane,
@@ -230,22 +231,27 @@ class MapGenerator:
             target_names_tmp = self.target_names
             target_position_tmp = self.target_position
             mep_data_tmp = self.mep_file_data if self.mep_file_data is not None else None
-        idx_axis_1, _, _ = get_idx_to_rotate(target_names_tmp)
+
 
         (x, y, z), com, _ = get_plane_from_points(points, to_center=None, **kwargs)
         projection = project_points_to_plane(points, z, com)
         local = np.array([to_plane_coordinates(p, com, x, y, z) for p in projection])
 
+        idx_axis_1, corners = get_idx_to_rotate(target_names_tmp)
+        self.projected_corners = corners
+        
+        local_changed = False
         if np.isnan(local[idx_axis_1, :].sum(axis=1)).any():
             # replace the points by the target if the points are not available. 
-            # TODO: chose the target on a config file corresponding to the back of the head.
             proj_target = project_points_to_plane(target_position_tmp[:, 3, :3], z, com)
             local_target = np.array([to_plane_coordinates(p, com, x, y, z) for p in proj_target])
             mask = local.copy()
             mask[~np.isnan(local)] = 1
             local[idx_axis_1, :] = local_target[idx_axis_1, :]
             local_changed = True
-        rotated_points = rotate_points(local[:, :2], idx_axis_1=idx_axis_1, additional_rot=0)
+
+        rotated_points = rotate_points(local[:, :2], idx_axis_1=idx_axis_1)
+        
         if local_changed:
             local_changed = False
             rotated_points *= mask[:, :2]
@@ -253,10 +259,10 @@ class MapGenerator:
         # from map_generator.plot_utils import plot_2d_points
         # fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True, num="Projected points")
 
-        # plot_2d_points(local, ax[0], colorized_points=(to_plot, colors))
-        # plot_2d_points(local_target, ax[1], colorized_points=(to_plot, colors))
-        # plot_2d_points(local, ax[0], colorized_points=(to_plot, colors))
-        # plot_2d_points(rotated_points, ax[0], colorized_points=(to_plot, colors))
+        # # plot_2d_points(local, ax[0], colorized_points=(to_plot, colors))
+        # # plot_2d_points(local_target, ax[1], colorized_points=(to_plot, colors))
+        # # plot_2d_points(local, ax[0], colorized_points=(to_plot, colors))
+        # plot_2d_points(rotated_points, ax[0], colorized_points=self.projected_corners)
         return rotated_points, mep_data_tmp, signal_data
 
     def _get_chan_names(self, chaninfo):
@@ -399,3 +405,7 @@ class MapGenerator:
         if show:
             plt.show()
         return ax
+
+    def plot_projection(self, ax=None, show=True):
+        rotated_points = np.array([self.map_characteristics["x_list"][0], self.map_characteristics["y_list"][0]]).T
+        plot_2d_points(rotated_points, ax, colorized_points=self.projected_corners)

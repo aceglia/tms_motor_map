@@ -8,10 +8,11 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QComboBox,
     QDialog,
+    QCheckBox,
+    QHBoxLayout
 )
 
 import os
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT as NavigationToolbar,
@@ -28,7 +29,7 @@ import numpy as np
 class MapWindow(QMainWindow):
     def __init__(self, parent=None, log_queue=None):
         super().__init__()
-        self.files = []
+        # self.files = []
         self.setMinimumSize(800, 600)
         self.setWindowTitle("Map Generator")
         self.central_widget = QWidget()
@@ -60,10 +61,26 @@ class MapWindow(QMainWindow):
         self.generate_map_button.clicked.connect(self._generate_map)
         self.options_layout.addWidget(self.generate_map_button)
 
+        self.map_options_button = QPushButton("Map Options")
+        self.map_options_button.clicked.connect(self._show_map_options)
+        self.map_options_button.setEnabled(False)
+        self.options_layout.addWidget(self.map_options_button)
+
         self.save_map_button = QPushButton("Save Map")
         self.save_map_button.clicked.connect(self.save_map)
         self.options_layout.addWidget(self.save_map_button)
+        self.show_proj_checkbox = QCheckBox("Show projection")
+        self.show_proj_checkbox.setChecked(False)
+
+        tmp_layout = QHBoxLayout()
+        tmp_layout.addWidget(QLabel("Show projection"))
+        tmp_layout.addWidget(self.show_proj_checkbox)
+        self.show_proj_checkbox.stateChanged.connect(self._update_plot)
+
+        self.options_layout.addLayout(tmp_layout)
+        self.options_layout.addWidget(self.show_proj_checkbox)
         self.layout.addLayout(self.options_layout, 0, 4, 2, 1)
+
 
     def _exclude_sites(self, row_index):
         if self.exclude_popup is None:
@@ -108,25 +125,32 @@ class MapWindow(QMainWindow):
         self._create_options_layout()
         self.central_widget.setLayout(self.layout)
 
+    def _show_map_options(self):
+        if self.current_map.options.exec_() == QDialog.Accepted:
+            self._generate_map()
+
     def load_files(self):
         self.file_initialized = False
         file_names, _ = QFileDialog.getOpenFileNames(self, "Select files", "", "Map generator files (*.pkl)")
         if file_names:
-            self.files = file_names
+            # self.files = file_names
             self.map_instance += 1
             self.current_map_index = self.map_instance
-            state = self.check_files()
+            state = self.check_files(file_names)
             if not state:
                 self.parent.log_queue.put_nowait("Error in loading files. Please check the files.")
                 return
             self.generate_map_button.setEnabled(True)
+            self.map_options_button.setEnabled(True)
             self.save_map_button.setEnabled(True)
             exclusions = self.current_map.exclusions
-            self.table_widget.set_files(self.files, exclusions)
+            self.table_widget.set_files(file_names, exclusions)
             self.file_initialized = True
             if len(self.maps) > 1:
                 self.prev_button.setEnabled(True)
                 self.next_button.setEnabled(True)
+                
+            self._generate_map()
 
     def update_muscle(self, index):
         if not self.file_initialized:
@@ -135,17 +159,17 @@ class MapWindow(QMainWindow):
         self.table_widget.set_files(self.files, self.current_map.exclusions)
         self._update_plot()
 
-    def check_files(self):
-        for file in self.files:
+    def check_files(self, files):
+        for file in files:
             if not os.path.exists(file):
-                self.files.remove(file)
+                files.remove(file)
                 self.parent.log_queue.put_nowait(f"File {file} does not exist.")
                 continue
-        if len(self.files) == 0:
+        if len(files) == 0:
             self.parent.log_queue.put_nowait("No valid files selected.")
             return False
         map_generator = MapGenerator()
-        map_generator.data_path_list = self.files
+        map_generator.data_path_list = files
         map_generator._load_data()
         all_channels = np.array([np.unique(d["signal_data"]["chanel_names"]) for d in map_generator.all_data])
         if not np.all(all_channels == all_channels[0, :]):
@@ -156,7 +180,7 @@ class MapWindow(QMainWindow):
         self.muscle_list.clear()
         self.muscle_list.addItems(muscle_names)
         self.muscle_list.setEnabled(True)
-        self.maps[self.current_map_index] = [Map(name, self.files) for name in muscle_names]
+        self.maps[self.current_map_index] = [Map(name, files) for name in muscle_names]
         [self.maps[self.current_map_index][i].set_data(map_generator.all_data) for i in range(len(muscle_names))]
         return True
 
@@ -169,13 +193,19 @@ class MapWindow(QMainWindow):
             return
         self.parent.log_queue.put_nowait("Map generated successfully.")
 
+    @property
+    def files(self):
+        return self.current_map.files if self.current_map else []
+
     def _update_plot(self):
         if not self.file_initialized:
             return
         if self.current_map.generator.map_characteristics is None:
             self._generate_map()
         self.ax.clear()
-        self.current_map.plot(ax=self.ax)
+        exclusions = self.current_map.exclusions
+        self.table_widget.set_files(self.files, exclusions)
+        self.current_map.plot(ax=self.ax, show_projection=self.show_projection)
         self._show_map()
 
     def _on_prev(self):
@@ -200,6 +230,10 @@ class MapWindow(QMainWindow):
         if self.current_muscle_idx >= len(self.maps[self.current_map_index]):
             return None
         return self.maps[self.current_map_index][self.current_muscle_idx]
+    
+    @property
+    def show_projection(self):
+        return self.show_proj_checkbox.isChecked()
 
     def save_map(self):
         if not self.file_initialized:
