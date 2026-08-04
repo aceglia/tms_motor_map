@@ -4,6 +4,7 @@ import numpy as np
 import random
 import pandas as pd
 
+
 def get_idx_to_rotate(target_names, points_local, target_to_align=None, **kwargs):
     grid_name = target_names[0].split(" ")[0]
 
@@ -35,25 +36,18 @@ def get_idx_to_rotate(target_names, points_local, target_to_align=None, **kwargs
     else:
         target_to_align_names = [f"{grid_name} ({i_max}, {j_min})", f"{grid_name} ({i_min}, {j_min})"]
 
-    
-    corners_idx = tuple(
-        np.where(target_names == corner)[0][-1]
-        for corner in corners
-    )
-    
-    to_align_idx = tuple(
-        np.where(target_names == target)[0]
-        for target in target_to_align_names
-    )
-    
+    corners_idx = tuple(np.where(target_names == corner)[0][-1] for corner in corners)
+
+    to_align_idx = tuple(np.where(target_names == target)[0] for target in target_to_align_names)
+
     filtered_idx = []
     for idx in to_align_idx:
         tmp = [i for i in idx if np.isfinite(np.sum(points_local[i]))]
-        if len(tmp) < 1 :
+        if len(tmp) < 1:
             filtered_idx.append(idx[-1])
         else:
-            filtered_idx.append(tmp[-1])   
-                          
+            filtered_idx.append(tmp[-1])
+
     idx_axis_1 = (
         filtered_idx[0],
         filtered_idx[1],

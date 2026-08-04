@@ -27,8 +27,8 @@
         "ransac_threshold": 1.0,
         "ransac_iterations": 1000,
         "target_to_align": [
-            "(0, 0)",
-            "(6, 0)"
+            "(6, 0)",
+            "(0, 0)"
         ],
         "exclude_outliers": true
     }

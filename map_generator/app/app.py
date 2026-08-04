@@ -291,11 +291,15 @@ class App(QMainWindow):
         if not self.brainsight.is_connected():
             try:
                 self.brainsight.connect()
-                self.print_log(f"SUCCESS: Connected to Brainsight at: {self.brainsight_adress_input.text()}:{self.brainsight_port_input.text()}")
+                self.print_log(
+                    f"SUCCESS: Connected to Brainsight at: {self.brainsight_adress_input.text()}:{self.brainsight_port_input.text()}"
+                )
             except Exception as e:
                 self.print_log(f"Error connecting to Brainsight: {e}")
         else:
-            self.print_log(f"SUCCESS: Already connected to Brainsight at: {self.brainsight_adress_input.text()}:{self.brainsight_port_input.text()}")
+            self.print_log(
+                f"SUCCESS: Already connected to Brainsight at: {self.brainsight_adress_input.text()}:{self.brainsight_port_input.text()}"
+            )
 
     def on_maps_clicked(self):
         if self.map_widget is None:
@@ -574,4 +578,3 @@ class App(QMainWindow):
             if os.path.exists(os.path.join(self.save_directory_base, "_data_tmp")):
                 shutil.rmtree(os.path.join(self.save_directory_base, "_data_tmp"), ignore_errors=True)
         self.close()
-

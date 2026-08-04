@@ -45,7 +45,6 @@ def get_data_from_pseudo(map_gen, mep_data=None, frame_for_file=None, seed=None)
     target_position_mat = [target_position[rdm_points[i]] for i in range(len(rdm_points))]
     target_names_mat = [target_names_roll[:, rdm_points[i]] for i in range(len(rdm_points))]
 
-
     if p2p_from_file and mep_data is not None:
         mep_data = check_frame_numbers(map_gen, mep_data, frame_for_file)
         # mep_data_file_roll = np.roll(mep_data[0], n_roll, axis=-1)
@@ -127,7 +126,7 @@ def compute_maps(
     else:
         target_pos = grid_target_pos
 
-    fig, ax = plt.subplots(2, len(signal_mat),num="points projection_" + name, sharey=True, sharex=True)
+    fig, ax = plt.subplots(2, len(signal_mat), num="points projection_" + name, sharey=True, sharex=True)
     for i in range(len(signal_mat)):
         tic = time.time()
         points = position_mat[i][:, 3, :3].copy()
@@ -156,9 +155,13 @@ def compute_maps(
             # points_to_add = points[to_plot, :]
             # repeat point to add
             # points_weighted = np.vstack((points_weighted, np.repeat(points_to_add, 10, axis=0)))
-            (x, y, z), com, inliers = get_plane_from_points(points_weighted, to_center=target_pos)  # , position_mat[-1][:, 3, :3])
+            (x, y, z), com, inliers = get_plane_from_points(
+                points_weighted, to_center=target_pos
+            )  # , position_mat[-1][:, 3, :3])
         else:
-            (x, y, z), com, inliers = get_plane_from_points(points, to_center=target_pos)  # , position_mat[-1][:, 3, :3])
+            (x, y, z), com, inliers = get_plane_from_points(
+                points, to_center=target_pos
+            )  # , position_mat[-1][:, 3, :3])
         # from map_generator.plot_utils import plot_plane
         # plot_plane(points, com, z, fig_name='global')
         # (x, y, z), com = get_plane_from_points(points_weighted) #, position_mat[-1][:, 3, :3])
@@ -344,24 +347,24 @@ if __name__ == "__main__":
     # participants = [f"P{p:03d}_TN" for p in paticipants]
     participants = [f"{p:03d}_TN" for p in list(range(2, 14))]
 
-    participants = ['004_TN_SCI']
+    participants = ["004_TN_SCI"]
     p2p_from_file = True
-    condition = ["grid",'pseudo']
-    muscle_list = ["fdi"] #, "ext_comm", "sup", "tri", "delt_post"]
+    condition = ["grid", "pseudo"]
+    muscle_list = ["fdi"]  # , "ext_comm", "sup", "tri", "delt_post"]
     seeds = [0]
-        
-    smooth_1 = [6] #, 6, 7, 8]
-    smooth_2 =  [6] #3, 4, 5]
+
+    smooth_1 = [6]  # , 6, 7, 8]
+    smooth_2 = [6]  # 3, 4, 5]
     for s in seeds:
         for s1 in smooth_1:
-            for s2 in smooth_2: 
+            for s2 in smooth_2:
                 # seed = np.random.randint(0, 100000)
                 seed = s
                 # seed = 'test'
                 smoothness = [s1, s2]
                 fold = f"smooth_{smoothness[0]}_{smoothness[1]}_{seed}_ransac_tmslyzer"
-                if 'SCI' in participants[0]:
-                    fold += '_sci'
+                if "SCI" in participants[0]:
+                    fold += "_sci"
                 # os.makedirs(f"results\{fold}", exist_ok=True)
                 # if os.path.exists(f"results\{fold}\maps_values.bio"):
                 #     os.remove(f"results\{fold}\maps_values.bio")
@@ -383,11 +386,13 @@ if __name__ == "__main__":
                             seed=seed,
                             smoothness=smooth,
                         )
-                        plot_maps(maps, name=name + f" maps participant {part_name}", fold=fold, muscle_names=muscle_list[:3])
+                        plot_maps(
+                            maps, name=name + f" maps participant {part_name}", fold=fold, muscle_names=muscle_list[:3]
+                        )
                         # data_frame = add_to_dataframe(maps, data_frame, part_name, name, muscle_list, fold, seed)
                         plt.show()
                         # plt.close()
                 # dir_to_save = f"maps_characteristics.csv"
                 # data_frame.to_csv(f"results\{fold}\{dir_to_save}")
-                    # plt.show()
+                # plt.show()
                 # break

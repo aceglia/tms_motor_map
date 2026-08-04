@@ -235,7 +235,6 @@ class MapGenerator:
             target_position_tmp = self.target_position
             mep_data_tmp = self.mep_file_data if self.mep_file_data is not None else None
 
-
         (x, y, z), com, _ = get_plane_from_points(points, to_center=None, **kwargs)
         projection = project_points_to_plane(points, z, com)
         local = np.array([to_plane_coordinates(p, com, x, y, z) for p in projection])
@@ -243,15 +242,17 @@ class MapGenerator:
         if exclude_outliers:
             mean_points = np.nanmean(local, axis=0)
             std_points = np.nanstd(local, axis=0)
-            mask = (abs(local[:, 0]) >= (mean_points[0] + 3 * std_points[0])) | (abs(local[:, 1]) >= (mean_points[1] + 3 * std_points[1]))
+            mask = (abs(local[:, 0]) >= (mean_points[0] + 3 * std_points[0])) | (
+                abs(local[:, 1]) >= (mean_points[1] + 3 * std_points[1])
+            )
             local[mask] = np.nan
 
         idx_axis_1, corners = get_idx_to_rotate(target_names_tmp, local, **kwargs)
-        
+
         self.projected_corners = corners
         local_changed = False
         if np.isnan(local[idx_axis_1, :].sum(axis=1)).any():
-            # replace the points by the target if the points are not available. 
+            # replace the points by the target if the points are not available.
             proj_target = project_points_to_plane(target_position_tmp[:, 3, :3], z, com)
             local_target = np.array([to_plane_coordinates(p, com, x, y, z) for p in proj_target])
             mask = local.copy()
@@ -261,7 +262,7 @@ class MapGenerator:
             rotated_targets = rotate_points(local_target[:, :2], idx_axis_1=idx_axis_1)
 
         rotated_points = rotate_points(local[:, :2], idx_axis_1=idx_axis_1)
-        
+
         if local_changed:
             local_changed = False
             rotated_points *= mask[:, :2]
@@ -269,8 +270,10 @@ class MapGenerator:
         if exclude_outliers:
             mean_points = np.nanmean(rotated_points, axis=0)
             std_points = np.nanstd(rotated_points, axis=0)
-            mask = (abs(rotated_points[:, 0]) >= (mean_points[0] + 3 * std_points[0])) | (abs(rotated_points[:, 1]) >= (mean_points[1] + 3 * std_points[1]))
-            rotated_points[mask] = np.nan        
+            mask = (abs(rotated_points[:, 0]) >= (mean_points[0] + 3 * std_points[0])) | (
+                abs(rotated_points[:, 1]) >= (mean_points[1] + 3 * std_points[1])
+            )
+            rotated_points[mask] = np.nan
 
         # from map_generator.plot_utils import plot_2d_points
         # fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True, num="Projected points")
@@ -377,7 +380,7 @@ class MapGenerator:
     @staticmethod
     def _concat(data, axis):
         if isinstance(data, list):
-            data =  np.concatenate(data, axis=axis)
+            data = np.concatenate(data, axis=axis)
         return data
 
     def from_loaded_data(self, loaded_data, stack_data=True):

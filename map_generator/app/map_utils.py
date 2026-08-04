@@ -1,6 +1,16 @@
 import json
 import os
-from PyQt5.QtWidgets import QWidget, QPushButton, QGridLayout, QCheckBox, QTableWidget, QTableWidgetItem, QDialog, QLineEdit, QLabel
+from PyQt5.QtWidgets import (
+    QWidget,
+    QPushButton,
+    QGridLayout,
+    QCheckBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QDialog,
+    QLineEdit,
+    QLabel,
+)
 
 import numpy as np
 import pandas as pd
@@ -10,7 +20,7 @@ from ..map_generator import MapGenerator
 
 class MapOptions(QDialog):
     def __init__(self):
-        super().__init__()  
+        super().__init__()
         self.setWindowTitle("Map Options")
         self._smoothness = 5
         self._grid_points = 50
@@ -22,7 +32,7 @@ class MapOptions(QDialog):
         self._simulation_time = 1
         self._baseline_window = [50, 5]
         self._mep_window = [18, 40]
-        self._target_to_align = ['(6, 0)', '(0, 0)']
+        self._target_to_align = ["(6, 0)", "(0, 0)"]
         self.exclude_outliers = True
         self.tile = False
         self.extend = "never"
@@ -69,7 +79,7 @@ class MapOptions(QDialog):
                 "ransac_threshold": self.ransac_threshold,
                 "ransac_iterations": self.ransac_iterations,
                 "target_to_align": self.target_to_align,
-                "exclude_outliers": self.exclude_outliers
+                "exclude_outliers": self.exclude_outliers,
             },
         }
 
@@ -80,20 +90,20 @@ class MapOptions(QDialog):
                     setattr(self, "_" + key2, options_dict[key][key2])
                     continue
                 if hasattr(self, key2):
-                    setattr(self, key2, options_dict[key][key2])               
+                    setattr(self, key2, options_dict[key][key2])
         self._init_layout()
 
     def save_file(self, file_path):
         options_dict = self.to_dict()
         try:
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 json.dump(options_dict, f, indent=4)
         except Exception as e:
             print(f"Error saving options to file: {e}")
-        
+
     def load_file(self, file_path):
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 options_dict = json.load(f)
             self.from_dict(options_dict)
         except Exception as e:
@@ -106,9 +116,15 @@ class MapOptions(QDialog):
         self.std_factor_mep_input = QLineEdit(str(self._std_factor_mep))
         self.std_factor_baseline_input = QLineEdit(str(self._std_factor_baseline))
         self.simulation_time_input = QLineEdit(str(self._simulation_time))
-        self.baseline_window_input = (QLineEdit(str(self._baseline_window[0])), QLineEdit(str(self._baseline_window[1])))
+        self.baseline_window_input = (
+            QLineEdit(str(self._baseline_window[0])),
+            QLineEdit(str(self._baseline_window[1])),
+        )
         self.mep_window_input = (QLineEdit(str(self._mep_window[0])), QLineEdit(str(self._mep_window[1])))
-        self.target_to_align_input = (QLineEdit(str(self._target_to_align[0])), QLineEdit(str(self._target_to_align[1])))
+        self.target_to_align_input = (
+            QLineEdit(str(self._target_to_align[0])),
+            QLineEdit(str(self._target_to_align[1])),
+        )
         self.ok_button = QPushButton("OK")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button = QPushButton("Cancel")
@@ -165,7 +181,11 @@ class MapOptions(QDialog):
 
     @property
     def std_factor_baseline(self):
-        return self._std_factor_baseline if self.std_factor_baseline_input is None else float(self.std_factor_baseline_input.text())
+        return (
+            self._std_factor_baseline
+            if self.std_factor_baseline_input is None
+            else float(self.std_factor_baseline_input.text())
+        )
 
     @property
     def simulation_time(self):
@@ -216,11 +236,18 @@ class Map:
                     d_reduced["signal_data"][key] = d["signal_data"][key]
             data_reduced.append(d_reduced)
         self.generator.from_loaded_data(data_reduced, stack_data=False)
-        self.exclusions.init(self.generator.all_data, self.generator.position, self.generator.target_position, self.generator.signal_array)
+        self.exclusions.init(
+            self.generator.all_data,
+            self.generator.position,
+            self.generator.target_position,
+            self.generator.signal_array,
+        )
         self.generator._stack_data()
 
     def generate_map(self):
-        self.generator.position, self.generator.target_position, self.generator.signal_array = self.exclusions.apply_exclusion()
+        self.generator.position, self.generator.target_position, self.generator.signal_array = (
+            self.exclusions.apply_exclusion()
+        )
         self.generator.generate_map(
             stimulation_time=self.options.simulation_time,
             windows=(self.options.baseline_window, self.options.mep_window),
@@ -229,8 +256,8 @@ class Map:
             tiled=False,
             threshold=self.options.ransac_threshold,
             max_iterations=self.options.ransac_iterations,
-            target_to_align=self.options.target_to_align, 
-            exclude_outliers=self.options.exclude_outliers
+            target_to_align=self.options.target_to_align,
+            exclude_outliers=self.options.exclude_outliers,
         )
 
     def _get_map_characteristics_pd(self):
@@ -258,10 +285,12 @@ class Map:
             self.generator.plot_projection(ax=ax, show=False)
         ax.figure.tight_layout()
 
+
 class FilesHandler(QWidget):
     """
     Class to handle files used for generating the maps.
     """
+
     def __init__(self, parent, files=None):
         self.parent = parent
         self._files = files
@@ -347,13 +376,17 @@ class Exclusion:
         self.signal_array = []
         self.target_position = []
         self.position = []
-    
+
     @staticmethod
     def _copy(list_object):
         return [mat.copy() for mat in list_object]
 
     def apply_exclusion(self):
-        position, target, signal = self._copy(self.position), self._copy(self.target_position), self._copy(self.signal_array)
+        position, target, signal = (
+            self._copy(self.position),
+            self._copy(self.target_position),
+            self._copy(self.signal_array),
+        )
         for i in range(len(self.signal_frames)):
             for k in range(len(self.brainsight_samples[i])):
                 if self.excluded_frame[i][k] or self.excluded_sample[i][k]:
@@ -366,7 +399,7 @@ class Exclusion:
     def init(self, all_data, positions, target_position, signal_array):
         self.signal_frames = [d["signal_data"]["frame_number"] for d in all_data]
         self.brainsight_samples = [d["brainsight_data"]["name"] for d in all_data]
-        
+
         self.excluded_frame = [[False for _ in self.signal_frames[i]] for i in range(len(self.signal_frames))]
         self.excluded_sample = [
             [False for _ in self.brainsight_samples[i]] for i in range(len(self.brainsight_samples))

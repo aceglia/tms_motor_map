@@ -167,7 +167,10 @@ def plot_2d_points(points, ax=None, color="k", colorized_points=None):
     colors = ["r", "g", "b", "c"]
     if colorized_points is not None:
         names, idxs = colorized_points
-        _ = [ax.scatter(points[idxs[i], 0], points[idxs[i], 1], color=colors[i], label=names[i]) for i in range(len(idxs))]
+        _ = [
+            ax.scatter(points[idxs[i], 0], points[idxs[i], 1], color=colors[i], label=names[i])
+            for i in range(len(idxs))
+        ]
     ax.set_aspect("equal")
     ax.legend()
     return ax

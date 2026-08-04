@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QDialog,
     QCheckBox,
-    QHBoxLayout
+    QHBoxLayout,
 )
 
 from PyQt5.Qt import QSizePolicy
@@ -40,7 +40,7 @@ class MapWindow(QMainWindow):
         self.figure = Figure()
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(
-            QSizePolicy.Policy.Expanding, 
+            QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
         )
         self.canvas.updateGeometry()
@@ -88,7 +88,6 @@ class MapWindow(QMainWindow):
         self.options_layout.addLayout(tmp_layout)
         self.options_layout.addWidget(self.show_proj_checkbox)
         self.layout.addLayout(self.options_layout, 0, 4, 2, 1)
-
 
     # def _exclude_sites(self, row_index):
     #     if self.exclude_popup is None:
@@ -157,7 +156,7 @@ class MapWindow(QMainWindow):
             if len(self.maps) > 1:
                 self.prev_button.setEnabled(True)
                 self.next_button.setEnabled(True)
-                
+
             self._generate_map()
 
     def update_muscle(self, index):
@@ -238,7 +237,7 @@ class MapWindow(QMainWindow):
         if self.current_muscle_idx >= len(self.maps[self.current_map_index]):
             return None
         return self.maps[self.current_map_index][self.current_muscle_idx]
-    
+
     @property
     def show_projection(self):
         return self.show_proj_checkbox.isChecked()
