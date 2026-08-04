@@ -4,7 +4,7 @@ import numpy as np
 import random
 import pandas as pd
 
-def get_idx_to_rotate(target_names):
+def get_idx_to_rotate(target_names, points_local, target_to_align=None, **kwargs):
     grid_name = target_names[0].split(" ")[0]
 
     coords = []
@@ -30,15 +30,33 @@ def get_idx_to_rotate(target_names):
         f"({i_min}, {j_max})",
         f"({i_max}, {j_max})",
     ]
+    if target_to_align is not None:
+        target_to_align_names = [f"{grid_name} {target_to_align[0]}", f"{grid_name} {target_to_align[1]}"]
+    else:
+        target_to_align_names = [f"{grid_name} ({i_max}, {j_min})", f"{grid_name} ({i_min}, {j_min})"]
+
     
     corners_idx = tuple(
         np.where(target_names == corner)[0][-1]
         for corner in corners
     )
-
+    
+    to_align_idx = tuple(
+        np.where(target_names == target)[0]
+        for target in target_to_align_names
+    )
+    
+    filtered_idx = []
+    for idx in to_align_idx:
+        tmp = [i for i in idx if np.isfinite(np.sum(points_local[i]))]
+        if len(tmp) < 1 :
+            filtered_idx.append(idx[-1])
+        else:
+            filtered_idx.append(tmp[-1])   
+                          
     idx_axis_1 = (
-        corners_idx[1],  # (i_max, j_min)
-        corners_idx[0],  # (i_min, j_min)
+        filtered_idx[0],
+        filtered_idx[1],
     )
     return idx_axis_1, (corners_names, corners_idx)
 
@@ -130,7 +148,7 @@ def project_point_onto_plane(point, plane_point, plane_normal):
     return point - distance * plane_normal
 
 
-def ransac_plane(points, threshold=0.01, max_iterations=1000):
+def ransac_plane(points, threshold=0.01, max_iterations=1000, **kwargs):
     best_inliers = []
     best_plane = None
 
@@ -171,7 +189,7 @@ def ransac_plane(points, threshold=0.01, max_iterations=1000):
 
 def get_plane_from_points(points, to_center=None, ransac=True, **kwargs):
 
-    centroid_all = np.mean(points, axis=0)
+    centroid_all = np.nanmean(points, axis=0)
 
     points_plane = points.copy()
     inliers = np.arange(points.shape[0])
@@ -181,7 +199,7 @@ def get_plane_from_points(points, to_center=None, ransac=True, **kwargs):
 
         points_plane = points[inliers]
 
-    centroid = np.mean(points_plane, axis=0)
+    centroid = np.nanmean(points_plane, axis=0)
     centered = points_plane - centroid
 
     _, _, Vt = np.linalg.svd(centered)

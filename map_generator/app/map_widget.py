@@ -12,6 +12,9 @@ from PyQt5.QtWidgets import (
     QHBoxLayout
 )
 
+from PyQt5.Qt import QSizePolicy
+
+
 import os
 from matplotlib.backends.backend_qt5agg import (
     FigureCanvasQTAgg as FigureCanvas,
@@ -19,7 +22,7 @@ from matplotlib.backends.backend_qt5agg import (
 )
 from matplotlib.figure import Figure
 
-from .map_utils import FilesHandler, Map, SiteModificationPopup
+from .map_utils import FilesHandler, Map
 from ..map_generator import MapGenerator
 import numpy as np
 
@@ -36,6 +39,11 @@ class MapWindow(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.figure = Figure()
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.setSizePolicy(
+            QSizePolicy.Policy.Expanding, 
+            QSizePolicy.Policy.Expanding,
+        )
+        self.canvas.updateGeometry()
         self.plot_toolbar = NavigationToolbar(self.canvas, self)
         self.ax = self.figure.add_subplot(111)
         self.maps = {}
@@ -82,21 +90,21 @@ class MapWindow(QMainWindow):
         self.layout.addLayout(self.options_layout, 0, 4, 2, 1)
 
 
-    def _exclude_sites(self, row_index):
-        if self.exclude_popup is None:
-            self.exclude_popup = SiteModificationPopup(self)
-        self.exclude_popup._populate_table(
-            [
-                {
-                    "file_name": self.table_widget.item(row_index, 0).text(),
-                    "signal_frames": [],
-                    "brainsight_samples": [],
-                    "checkboxes": [],
-                }
-            ]
-        )
-        if self.exclude_popup.exec_() == QDialog.Accepted:
-            self.exclude_buttons[row_index]["excluded"] = self.exclude_popup.get_modifications()
+    # def _exclude_sites(self, row_index):
+    #     if self.exclude_popup is None:
+    #         self.exclude_popup = SiteModificationPopup(self)
+    #     self.exclude_popup._populate_table(
+    #         [
+    #             {
+    #                 "file_name": self.table_widget.item(row_index, 0).text(),
+    #                 "signal_frames": [],
+    #                 "brainsight_samples": [],
+    #                 "checkboxes": [],
+    #             }
+    #         ]
+    #     )
+    #     if self.exclude_popup.exec_() == QDialog.Accepted:
+    #         self.exclude_buttons[row_index]["excluded"] = self.exclude_popup.get_modifications()
 
     def _init_layout(self):
         self.layout = QGridLayout()

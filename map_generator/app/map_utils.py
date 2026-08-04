@@ -23,6 +23,7 @@ class MapOptions(QDialog):
         self._baseline_window = [50, 5]
         self._mep_window = [18, 40]
         self._target_to_align = ['(6, 0)', '(0, 0)']
+        self.exclude_outliers = True
         self.tile = False
         self.extend = "never"
         self.interp = "nearest"
@@ -38,6 +39,11 @@ class MapOptions(QDialog):
         self.mep_window_input = None
         self.target_to_align_input = None
         self._create_layout()
+        if os.path.exists("default_map_options.json"):
+            try:
+                self.load_file("default_map_options.json")
+            except:
+                pass
 
     def to_dict(self):
         return {
@@ -63,13 +69,18 @@ class MapOptions(QDialog):
                 "ransac_threshold": self.ransac_threshold,
                 "ransac_iterations": self.ransac_iterations,
                 "target_to_align": self.target_to_align,
+                "exclude_outliers": self.exclude_outliers
             },
         }
 
     def from_dict(self, options_dict):
         for key in options_dict:
-            if hasattr(self, key):
-                setattr(self, key, options_dict[key])
+            for key2 in options_dict[key]:
+                if hasattr(self, "_" + key2):
+                    setattr(self, "_" + key2, options_dict[key][key2])
+                    continue
+                if hasattr(self, key2):
+                    setattr(self, key2, options_dict[key][key2])               
         self._init_layout()
 
     def save_file(self, file_path):
@@ -179,7 +190,7 @@ class MapOptions(QDialog):
         if self.target_to_align_input is None:
             return self._target_to_align
         else:
-            return str((self.target_to_align_input[0].text()), (self.target_to_align_input[1].text()))
+            return [(self.target_to_align_input[0].text()), (self.target_to_align_input[1].text())]
 
 
 class Map:
@@ -193,7 +204,6 @@ class Map:
         self.files = files if files is not None else []
         self.generator = MapGenerator()
 
-
     def set_data(self, data):
         muscle_idx = data[0]["signal_data"]["chanel_names"].index(self.muscle_name)
         data_reduced = []
@@ -205,11 +215,12 @@ class Map:
                 else:
                     d_reduced["signal_data"][key] = d["signal_data"][key]
             data_reduced.append(d_reduced)
-        self.generator.from_loaded_data(data_reduced)
-        self.exclusions.init(self.generator.all_data)
+        self.generator.from_loaded_data(data_reduced, stack_data=False)
+        self.exclusions.init(self.generator.all_data, self.generator.position, self.generator.target_position, self.generator.signal_array)
+        self.generator._stack_data()
 
     def generate_map(self):
-        self.exclusions.apply_exclusion(self.generator.signal_data, self.generator.brainsight_data)
+        self.generator.position, self.generator.target_position, self.generator.signal_array = self.exclusions.apply_exclusion()
         self.generator.generate_map(
             stimulation_time=self.options.simulation_time,
             windows=(self.options.baseline_window, self.options.mep_window),
@@ -218,6 +229,8 @@ class Map:
             tiled=False,
             threshold=self.options.ransac_threshold,
             max_iterations=self.options.ransac_iterations,
+            target_to_align=self.options.target_to_align, 
+            exclude_outliers=self.options.exclude_outliers
         )
 
     def _get_map_characteristics_pd(self):
@@ -243,13 +256,12 @@ class Map:
             self.generator.plot(ax=ax, show=False)
         else:
             self.generator.plot_projection(ax=ax, show=False)
-
+        ax.figure.tight_layout()
 
 class FilesHandler(QWidget):
     """
     Class to handle files used for generating the maps.
     """
-
     def __init__(self, parent, files=None):
         self.parent = parent
         self._files = files
@@ -268,7 +280,6 @@ class FilesHandler(QWidget):
         # self.add_file_button.clicked.connect(self._on_add_file)
         # self.remove_file_button = QPushButton("Remove file")
         # self.remove_file_button.clicked.connect(self._remove_row)
-
         self.layout = QGridLayout()
         self.layout.addWidget(self.table_widget, 0, 0, 1, 2)
         # self.layout.addWidget(self.add_file_button, 1, 0)
@@ -296,6 +307,8 @@ class FilesHandler(QWidget):
         self.exclude_popup._populate_table(self.exclusions.get_exclusion_info(row_idx))
         if self.exclude_popup.exec_() == QDialog.Accepted:
             self.exclusions.set_exclusion_info(self.exclude_popup.get_exclusion_info(), row_idx)
+            self.parent.parent.log_queue.put_nowait(f"Applying exlusion...")
+            self.parent._generate_map()
 
     def set_files(self, files, exclusions=None):
         self._reinitialize_table()
@@ -331,23 +344,34 @@ class Exclusion:
         self.brainsight_samples = []
         self.excluded_frame = []
         self.excluded_sample = []
+        self.signal_array = []
+        self.target_position = []
+        self.position = []
+    
+    @staticmethod
+    def _copy(list_object):
+        return [mat.copy() for mat in list_object]
 
-    def apply_exclusion(self, signal_data, brainsight_data):
+    def apply_exclusion(self):
+        position, target, signal = self._copy(self.position), self._copy(self.target_position), self._copy(self.signal_array)
         for i in range(len(self.signal_frames)):
             for k in range(len(self.brainsight_samples[i])):
                 if self.excluded_frame[i][k] or self.excluded_sample[i][k]:
-                    signal_data[i][..., k] = np.nan
+                    signal[i][..., k] = np.nan
                 if self.excluded_sample[i][k]:
-                    brainsight_data[i][..., k] = np.nan
-        return signal_data, brainsight_data
+                    position[i][k, ...] = np.nan
+                    target[i][k, ...] = np.nan
+        return position, target, signal
 
-    def init(self, all_data):
+    def init(self, all_data, positions, target_position, signal_array):
         self.signal_frames = [d["signal_data"]["frame_number"] for d in all_data]
         self.brainsight_samples = [d["brainsight_data"]["name"] for d in all_data]
+        
         self.excluded_frame = [[False for _ in self.signal_frames[i]] for i in range(len(self.signal_frames))]
         self.excluded_sample = [
             [False for _ in self.brainsight_samples[i]] for i in range(len(self.brainsight_samples))
         ]
+        self.position, self.target_position, self.signal_array = positions, target_position, signal_array
 
     def get_exclusion_info(self, idx):
         file_info = {
