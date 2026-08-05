@@ -1,4 +1,5 @@
-import json
+import matplotlib.pyplot as plt
+import yaml
 import os
 from PyQt5.QtWidgets import (
     QWidget,
@@ -27,8 +28,8 @@ class MapOptions(QDialog):
         self._std_factor_mep = 3.5
         self._std_factor_baseline = 2.0
         self.ransac = True
-        self.ransac_threshold = 1.0
-        self.ransac_iterations = 1000
+        self.ransac_threshold = 1.5
+        self.ransac_iterations = 2000
         self._simulation_time = 1
         self._baseline_window = [50, 5]
         self._mep_window = [18, 40]
@@ -49,9 +50,9 @@ class MapOptions(QDialog):
         self.mep_window_input = None
         self.target_to_align_input = None
         self._create_layout()
-        if os.path.exists("default_map_options.json"):
+        if os.path.exists("default_map_options.yaml"):
             try:
-                self.load_file("default_map_options.json")
+                self.load_file("default_map_options.yaml")
             except:
                 pass
 
@@ -95,16 +96,18 @@ class MapOptions(QDialog):
 
     def save_file(self, file_path):
         options_dict = self.to_dict()
+        # write dict in yaml format to file
+
         try:
             with open(file_path, "w") as f:
-                json.dump(options_dict, f, indent=4)
+                yaml.dump(options_dict, f, default_flow_style=False, allow_unicode=True)
         except Exception as e:
             print(f"Error saving options to file: {e}")
 
     def load_file(self, file_path):
         try:
             with open(file_path, "r") as f:
-                options_dict = json.load(f)
+                options_dict = yaml.safe_load(f)
             self.from_dict(options_dict)
         except Exception as e:
             print(f"Error loading options from file: {e}")
@@ -258,9 +261,12 @@ class Map:
             max_iterations=self.options.ransac_iterations,
             target_to_align=self.options.target_to_align,
             exclude_outliers=self.options.exclude_outliers,
+            ransac=self.options.ransac,
         )
 
     def _get_map_characteristics_pd(self):
+        if self.generator.map_characteristics is None:
+            self.generate_map()
         char = self.generator.map_characteristics
         data_frame_tmp = pd.DataFrame()
         data_frame_tmp["muscle"] = [self.muscle_name]
@@ -268,15 +274,52 @@ class Map:
         data_frame_tmp["y_cog"] = char["y_cog_list"]
         data_frame_tmp["area"] = char["area_list"]
         data_frame_tmp["volume"] = char["volume_list"]
-        data_frame_tmp["nb_sites"] = self.positions
-        data_frame_tmp["file_used"] = [self.files]
-        # data_frame_tmp["options"] = [self.options.to_dict()]
-        # data_frame_tmp["exclusions"] = [self.exclusions.get_exclusion_info(i) for i in range(len(self.files))]
+        data_frame_tmp["nb_sites"] = np.shape(self.generator.position)[0]
         return data_frame_tmp
 
-    def save(self, file_path):
+    def save(self, save_dir):
+        subdir = os.path.join(save_dir, self.muscle_name)
+        os.makedirs(subdir, exist_ok=True)
+        self.save_characteristics(subdir)
+        self.save_metadata(subdir)
+        self.save_map_image(subdir)
+        self.save_projection_image(subdir)
+
+    def save_map_image(self, save_dir):
+        ax = self.generator.plot(show=False)
+        ax.figure.tight_layout()
+        file_path = os.path.join(save_dir, f"{self.muscle_name}_map.png")
+        ax.figure.savefig(file_path, dpi=300)
+        plt.close()
+
+    def save_projection_image(self, save_dir):
+        ax = self.generator.plot_projection(show=False)
+        ax.figure.tight_layout()
+        file_path = os.path.join(save_dir, f"{self.muscle_name}_projection.png")
+        ax.figure.savefig(file_path, dpi=300)
+        plt.close()
+
+    def save_characteristics(self, save_dir):
         data_frame_tmp = self._get_map_characteristics_pd()
+        file_path = os.path.join(save_dir, f"{self.muscle_name}_map.csv")
         data_frame_tmp.to_csv(file_path, index=False)
+
+    def save_metadata(self, save_dir):
+        metadata = {
+            "muscle_name": str(self.muscle_name),
+            "files": self.files,
+            "options": self.options.to_dict(),
+        }
+        file_path = os.path.join(save_dir, f"{self.muscle_name}_metadata.yaml")
+        with open(file_path, "w") as f:
+            yaml.dump(metadata, f, default_flow_style=False, allow_unicode=True)
+
+        exclusion_info = {
+            os.path.basename(file): self.exclusions.get_exclusion_info(i) for i, file in enumerate(self.files)
+        }
+        exclusion_path = os.path.join(save_dir, f"{self.muscle_name}_exclusions.yaml")
+        with open(exclusion_path, "w") as f:
+            yaml.dump(exclusion_info, f, default_flow_style=False, allow_unicode=True)
 
     def plot(self, ax=None, show_projection=False):
         if not show_projection:

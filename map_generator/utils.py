@@ -36,24 +36,25 @@ def get_idx_to_rotate(target_names, points_local, target_to_align=None, **kwargs
     else:
         target_to_align_names = [f"{grid_name} ({i_max}, {j_min})", f"{grid_name} ({i_min}, {j_min})"]
 
-    corners_idx = tuple(np.where(target_names == corner)[0][-1] for corner in corners)
-
+    corners_idx = tuple(np.where(target_names == corner)[0] for corner in corners)
+    corners_idx = filter_idx_list(corners_idx, points_local)
     to_align_idx = tuple(np.where(target_names == target)[0] for target in target_to_align_names)
-
-    filtered_idx = []
-    for idx in to_align_idx:
-        tmp = [i for i in idx if np.isfinite(np.sum(points_local[i]))]
-        if len(tmp) < 1:
-            filtered_idx.append(idx[-1])
-        else:
-            filtered_idx.append(tmp[-1])
-
+    filtered_idx = filter_idx_list(to_align_idx, points_local)
     idx_axis_1 = (
         filtered_idx[0],
         filtered_idx[1],
     )
     return idx_axis_1, (corners_names, corners_idx)
 
+def filter_idx_list(idx_list, points):
+    filtered_idx = []
+    for idx in idx_list:
+        tmp = [i for i in idx if np.isfinite(np.sum(points[i]))]
+        if len(tmp) < 1:
+            filtered_idx.append(idx[-1])
+        else:
+            filtered_idx.append(tmp[-1])
+    return filtered_idx
 
 def project_points_to_plane(points, normal, com):
     projected_points = np.zeros_like(points)
@@ -150,9 +151,13 @@ def ransac_plane(points, threshold=0.01, max_iterations=1000, **kwargs):
         # Randomly sample 3 points to define a plane
         sample_indices = np.random.choice(points.shape[0], 3, replace=False)
         p1, p2, p3 = points[sample_indices]
-
+        if np.isnan(p1 + p2 + p3).any():
+            continue
         # Compute the plane normal
         normal = np.cross(p2 - p1, p3 - p1)
+        if np.linalg.norm(normal) == 0:
+            continue
+
         normal /= np.linalg.norm(normal)
 
         # Compute the plane equation: ax + by + cz + d = 0
@@ -249,7 +254,6 @@ def exclude_signal_data(p2p, baseline, n_map):
 
 
 def get_random_points(list_nb_points, nb_total_points, seed=None):
-    # test avec 50, 100, 2504, 26(pasmal), 58, 925
     if seed is not None:
         random.seed(seed)
     initial_list = np.arange(0, nb_total_points)

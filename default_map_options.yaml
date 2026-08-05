@@ -1,0 +1,27 @@
+grid_fitting:
+  autoscale: 'on'
+  extend: never
+  interp: nearest
+  n_points: 50
+  regularizer: gradient
+  smoothness: 5.0
+  solver: normal
+  tile: false
+mep_analysis:
+  baseline_window:
+  - 50
+  - 5
+  mep_window:
+  - 18
+  - 40
+  simulation_time: 1.0
+  std_factor_baseline: 2.0
+  std_factor_mep: 3.5
+plane_projection:
+  exclude_outliers: true
+  ransac: true
+  ransac_iterations: 2000
+  ransac_threshold: 1.5
+  target_to_align:
+  - (6, 0)
+  - (0, 0)
