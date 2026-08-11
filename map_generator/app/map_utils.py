@@ -13,6 +13,8 @@ from PyQt5.QtWidgets import (
     QLabel,
 )
 
+import pickle
+
 import numpy as np
 import pandas as pd
 
@@ -519,3 +521,209 @@ class SiteModificationPopup(QDialog):
                     {"remove_mep": remove_mep_checkbox.isChecked(), "remove_site": remove_site_checkbox.isChecked()}
                 )
         return file_info
+
+
+trans_names = ["Loc. X", "Loc. Y", "Loc. Z"]
+rot_names = ["m0n0", "m0n1", "m0n2", "m1n0", "m1n1", "m1n2", "m2n0", "m2n1", "m2n2"]
+
+
+class Converter(QDialog):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setWindowTitle("Convert Raw Data")
+        self._create_layout()
+
+    def _create_layout(self):
+        layout = QGridLayout()
+        self.input_file_label = QLabel("Description file:")
+        self.input_file_line_edit = QLineEdit()
+        self.input_file_button = QPushButton("Browse")
+        self.input_file_button.clicked.connect(self.browse_input_file)
+
+        self.signal_file_label = QLabel("Signal file:")
+        self.signal_file_line_edit = QLineEdit()
+        self.signal_file_button = QPushButton("Browse")
+        self.signal_file_button.clicked.connect(self.browse_signal_file)
+
+        self.brainsight_file_label = QLabel("Brainsight file:")
+        self.brainsight_file_line_edit = QLineEdit()
+        self.brainsight_file_button = QPushButton("Browse")
+        self.brainsight_file_button.clicked.connect(self.browse_brainsight_file)
+
+        self.convert_button = QPushButton("Convert")
+        self.convert_button.clicked.connect(self.convert)
+
+        layout.addWidget(self.input_file_label, 0, 0)
+        layout.addWidget(self.input_file_line_edit, 0, 1)
+        layout.addWidget(self.input_file_button, 0, 2)
+        layout.addWidget(self.signal_file_label, 1, 0)
+        layout.addWidget(self.signal_file_line_edit, 1, 1)
+        layout.addWidget(self.signal_file_button, 1, 2)
+        layout.addWidget(self.brainsight_file_label, 2, 0)
+        layout.addWidget(self.brainsight_file_line_edit, 2, 1)
+        layout.addWidget(self.brainsight_file_button, 2, 2)
+        layout.addWidget(
+            QLabel(
+                "The converted file will have the same name as the description file with '_converted.pkl' appended."
+            ),
+            3,
+            0,
+            1,
+            3,
+        )
+        layout.addWidget(self.convert_button, 4, 0, 1, 2)
+
+        self.setLayout(layout)
+
+    def browse_input_file(self):
+        from PyQt5.QtWidgets import QFileDialog
+
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "Select Description File", "", "Text Files (*.csv);;All Files (*)"
+        )
+        if file_name:
+            self.input_file_line_edit.setText(file_name)
+            self.check_files()
+
+    def browse_signal_file(self):
+        from PyQt5.QtWidgets import QFileDialog
+
+        file_name, _ = QFileDialog.getOpenFileName(self, "Select Signal File", "", "Text Files (*.mat);;All Files (*)")
+        if file_name:
+            self.signal_file_line_edit.setText(file_name)
+            self.check_files()
+
+    def browse_brainsight_file(self):
+        from PyQt5.QtWidgets import QFileDialog
+
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "Select Brainsight File", "", "Text Files (*.txt);;All Files (*)"
+        )
+        if file_name:
+            self.brainsight_file_line_edit.setText(file_name)
+            self.check_files()
+
+    def check_files(self):
+        input_file = self.input_file_line_edit.text()
+        signal_file = self.signal_file_line_edit.text()
+        brainsight_file = self.brainsight_file_line_edit.text()
+        if not input_file or not signal_file or not brainsight_file:
+            self.convert_button.setEnabled(False)
+        else:
+            self.convert_button.setEnabled(True)
+        return True
+
+    def convert(self):
+        brainsight_file_path = self.brainsight_file_line_edit.text()
+        signal_file_path = self.signal_file_line_edit.text()
+        description_file_path = self.input_file_line_edit.text()
+        sample_names, sample_roto_trans, target_names, target_positions, coordinate_system = self.parse_brainsight(
+            brainsight_file_path
+        )
+        array, chanel_names, frames, interval = MapGenerator().load_mat_file(signal_file_path)
+        time = np.arange(0, array.shape[-1], step=1) * interval
+        sample_roto_trans, target_positions, target_names, array, frames, sample_names = self.align_sample_to_frames(
+            description_file_path, sample_names, frames, sample_roto_trans, target_positions, target_names, array
+        )
+        self.output_file_path = os.path.splitext(description_file_path)[0] + "_converted.pkl"
+        if os.path.exists(self.output_file_path):
+            os.remove(self.output_file_path)
+        with open(self.output_file_path, "ab") as f:
+            for i in range(array.shape[0]):
+                dict_loaded = {
+                    "brainsight_data": {
+                        "position": sample_roto_trans[i].flatten(),
+                        "target_position": target_positions[i].flatten(),
+                        "target_name": target_names[i],
+                        "name": sample_names[i],
+                    },
+                    "signal_data": {
+                        "time": time[:, None],
+                        "data": array[i].T,
+                        "chanel_names": chanel_names,
+                        "frame_number": "frame " + str(frames[i]),
+                    },
+                }
+                pickle.dump(dict_loaded, f)
+        self.accept()
+
+    @staticmethod
+    def get_by_key(headers, parsed_data, key):
+        start_line = [i for i, name in headers if key in name]
+        if len(start_line) == 0:
+            print(f"No {key} data found in the file.")
+            names = None
+            roto_trans_data = None
+            assoc_target = []
+        else:
+            end_lines = [i + 1 for i, name in enumerate(headers) if key in name[1]]
+            end_lines = headers[end_lines[0]][0]
+            sub_headers = parsed_data[start_line[0]].split("\t")
+            assoc_target_idx = [s for s, sub in enumerate(sub_headers) if "Assoc. Target" in sub]
+            if len(assoc_target_idx) > 0:
+                assoc_target_idx = assoc_target_idx[0]
+            else:
+                assoc_target_idx = None
+            start_line = start_line[0] + 1
+            names = []
+            assoc_target = []
+            roto_trans_data = np.zeros((end_lines - start_line, 4, 4))
+            idx_trans = [s for s, sub in enumerate(sub_headers) if sub in trans_names]
+            idx_rot = [s for s, sub in enumerate(sub_headers) if sub in rot_names]
+            for l, line in enumerate(parsed_data[start_line:end_lines]):
+                names.append(line.split("\t")[0])
+                if assoc_target_idx is not None:
+                    assoc_target.append(line.split("\t")[assoc_target_idx])
+                roto_trans_data[l, :3, 3] = np.array(
+                    line.split("\t")[slice(idx_trans[0], idx_trans[-1] + 1)], dtype=float
+                )
+                roto_trans_data[l, :3, :3] = np.array(
+                    line.split("\t")[slice(idx_rot[0], idx_rot[-1] + 1)], dtype=float
+                ).reshape(3, 3)
+                roto_trans_data[l, 3, 3] = 1
+        if len(assoc_target) > 0:
+            return names, roto_trans_data, np.array(assoc_target)
+        else:
+            return names, roto_trans_data
+
+    @staticmethod
+    def match_position_to_target(target_names, target_roto_trans, assoc_targets):
+        matched_roto_trans = np.zeros((len(assoc_targets), 4, 4))
+        for t, target in enumerate(assoc_targets):
+            if target in target_names:
+                target_idx = target_names.index(target)
+                matched_roto_trans[t] = target_roto_trans[target_idx]
+        return assoc_targets, matched_roto_trans
+
+    def parse_brainsight(self, path):
+        with open(path, "r") as f:
+            data = f.read()
+        parsed_data = data.splitlines()
+        headers = [(i, name) for i, name in enumerate(parsed_data) if "#" in name]
+        coordinate_system = [name for i, name in headers if "Coordinate system" in name][0].split(":")[1].strip()
+        target_names, target_roto_trans = self.get_by_key(headers, parsed_data, "Target Name")
+        sample_names, sample_roto_trans, ass_targets = self.get_by_key(headers, parsed_data, "Sample Name")
+        target_names, target_positions = self.match_position_to_target(target_names, target_roto_trans, ass_targets)
+        return sample_names, sample_roto_trans, target_names, target_positions, coordinate_system
+
+    def align_sample_to_frames(
+        self, file, sample_names, frames, sample_roto_trans, target_positions, target_names, signal_data
+    ):
+        import pandas as pd
+
+        df = pd.read_csv(file)
+        frames_idxs = []
+        samples = []
+        sample_names_short = [s.split(" ")[1] for s in sample_names]
+        for frame, sample in zip(df["frames"], df["samples"]):
+            if str(sample) in sample_names_short and frame in frames:
+                samples.append(sample_names_short.index(str(sample)))
+                frames_idxs.append(frames.index(frame))
+        return (
+            sample_roto_trans[samples],
+            target_positions[samples],
+            target_names[samples],
+            signal_data[frames_idxs],
+            np.array(frames)[frames_idxs],
+            np.array(sample_names)[samples],
+        )

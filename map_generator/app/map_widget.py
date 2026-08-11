@@ -23,7 +23,7 @@ from matplotlib.backends.backend_qt5agg import (
 from matplotlib.figure import Figure
 import yaml
 
-from .map_utils import FilesHandler, Map
+from .map_utils import FilesHandler, Map, Converter
 from ..map_generator import MapGenerator
 import numpy as np
 
@@ -83,6 +83,10 @@ class MapWindow(QMainWindow):
         self.save_map_button.setEnabled(False)
         self.options_layout.addWidget(self.save_map_button)
 
+        self.convert_raw_data_button = QPushButton("Convert Raw Data")
+        self.convert_raw_data_button.clicked.connect(self.convert_raw_data)
+        self.options_layout.addWidget(self.convert_raw_data_button)
+
         self.show_proj_checkbox = QCheckBox("Show projection")
         self.show_proj_checkbox.setChecked(False)
 
@@ -94,6 +98,13 @@ class MapWindow(QMainWindow):
         self.options_layout.addLayout(tmp_layout)
         self.options_layout.addWidget(self.show_proj_checkbox)
         self.layout.addLayout(self.options_layout, 0, 4, 2, 1)
+
+    def convert_raw_data(self):
+        converter_window = Converter(self)
+        if converter_window.exec_() == QDialog.Accepted:
+            self.parent.log_queue.put_nowait("Raw data converted successfully.")
+            self.parent.log_queue.put_nowait(f"Loading converted data...")
+            self.load_files(file_names=[converter_window.output_file_path])
 
     # def _exclude_sites(self, row_index):
     #     if self.exclude_popup is None:

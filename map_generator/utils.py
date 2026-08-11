@@ -46,6 +46,7 @@ def get_idx_to_rotate(target_names, points_local, target_to_align=None, **kwargs
     )
     return idx_axis_1, (corners_names, corners_idx)
 
+
 def filter_idx_list(idx_list, points):
     filtered_idx = []
     for idx in idx_list:
@@ -55,6 +56,7 @@ def filter_idx_list(idx_list, points):
         else:
             filtered_idx.append(tmp[-1])
     return filtered_idx
+
 
 def project_points_to_plane(points, normal, com):
     projected_points = np.zeros_like(points)
