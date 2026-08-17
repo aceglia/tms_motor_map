@@ -168,17 +168,19 @@ class MapWindow(QMainWindow):
                 self.parent.log_queue.put_nowait(f"Main directory {main_dir} does not exist.")
                 return
             metadata_files = []
+            final_subdir = []
             for sub_dir in sub_dirs:
                 if not os.path.exists(os.path.join(main_dir, sub_dir)):
                     self.parent.log_queue.put_nowait(f"Sub directory {sub_dir} does not exist.")
-                    return
+                    continue
                 metadata_file = os.path.join(main_dir, sub_dir, f"{sub_dir}_metadata.yaml")
                 if not os.path.exists(metadata_file):
                     self.parent.log_queue.put_nowait(f"Metadata file {metadata_file} does not exist.")
                     return
                 metadata_files.append(metadata_file)
+                final_subdir.append(sub_dir)
 
-            if len(metadata_files) != len(sub_dirs):
+            if len(metadata_files) != len(final_subdir):
                 self.parent.log_queue.put_nowait("Number of metadata files does not match number of sub directories.")
                 return
 

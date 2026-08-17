@@ -52,9 +52,9 @@ class MapOptions(QDialog):
         self.mep_window_input = None
         self.target_to_align_input = None
         self._create_layout()
-        if os.path.exists("default_map_options.yaml"):
+        if os.path.exists("map_generator/default_map_options.yaml"):
             try:
-                self.load_file("default_map_options.yaml")
+                self.load_file("map_generator/default_map_options.yaml")
             except:
                 pass
 
