@@ -220,19 +220,19 @@ class MapGenerator:
     def get_projected_points(self, exclude_outliers=True, **kwargs):
         points = self.position[:, 3, :3].copy()
         idx_zero = np.where(np.all(points == 0, axis=1))[0]
+        target_names_tmp = self.target_names
+        target_position_tmp = self.target_position
         if len(idx_zero) > 0:
-            points = np.delete(points, idx_zero, axis=0)
-            signal_array = np.delete(self.signal_array, idx_zero, axis=-1)
-            target_names_tmp = np.delete(self.target_names, idx_zero, axis=-1)
-            target_position_tmp = np.delete(self.target_position, idx_zero, axis=-1)
+            points[idx_zero] = np.nan
+            signal_array = self.signal_array.copy()
+            signal_array[..., idx_zero] = np.nan
             if self.mep_file_data is not None:
-                mep_data_tmp = np.delete(self.mep_file_data, idx_zero, axis=-1)
+                mep_data_tmp = self.mep_file_data.copy()
+                mep_data_tmp[..., idx_zero] = np.nan
             else:
                 mep_data_tmp = None
         else:
             signal_array = self.signal_array
-            target_names_tmp = self.target_names
-            target_position_tmp = self.target_position
             mep_data_tmp = self.mep_file_data if self.mep_file_data is not None else None
 
         (x, y, z), com, _ = get_plane_from_points(points, to_center=None, **kwargs)
@@ -248,6 +248,10 @@ class MapGenerator:
             local[mask] = np.nan
 
         idx_axis_1, corners = get_idx_to_rotate(target_names_tmp, local, **kwargs)
+        # if None in idx_axis_1:
+        #     raise ValueError(
+        #         "Not enough valid points to compute the rotation. Please check the data and ensure that there are valid points for the specified corners."
+        #     )
 
         self.projected_corners = corners
         local_changed = False
@@ -290,8 +294,8 @@ class MapGenerator:
     def _load_from_wave_data(self, wave_data):
         items = list(wave_data[0][0].dtype.fields.keys())
         chanel_names = self._get_chan_names(wave_data[0][0][items.index("chaninfo")].reshape(-1))
+        frames = list(range(1, wave_data[0][0][items.index("frames")][0][0] + 1))
         interval = wave_data[0][0][items.index("interval")][0][0]
-        frames = list(range(wave_data[0][0][items.index("frames")][0][0]))
         array = wave_data[0][0][items.index("values")]
         array = np.swapaxes(array, 0, -1)
         return array, chanel_names, frames, interval
@@ -437,4 +441,5 @@ class MapGenerator:
 
     def plot_projection(self, ax=None, show=True):
         rotated_points = np.array([self.map_characteristics["x_list"][0], self.map_characteristics["y_list"][0]]).T
-        plot_2d_points(rotated_points, ax, colorized_points=self.projected_corners)
+        ax = plot_2d_points(rotated_points, ax, colorized_points=self.projected_corners)
+        return ax

@@ -1,4 +1,5 @@
-import json
+import matplotlib.pyplot as plt
+import yaml
 import os
 from PyQt5.QtWidgets import (
     QWidget,
@@ -11,6 +12,8 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QLabel,
 )
+
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -27,8 +30,8 @@ class MapOptions(QDialog):
         self._std_factor_mep = 3.5
         self._std_factor_baseline = 2.0
         self.ransac = True
-        self.ransac_threshold = 1.0
-        self.ransac_iterations = 1000
+        self.ransac_threshold = 1.5
+        self.ransac_iterations = 2000
         self._simulation_time = 1
         self._baseline_window = [50, 5]
         self._mep_window = [18, 40]
@@ -49,9 +52,9 @@ class MapOptions(QDialog):
         self.mep_window_input = None
         self.target_to_align_input = None
         self._create_layout()
-        if os.path.exists("default_map_options.json"):
+        if os.path.exists("map_generator/default_map_options.yaml"):
             try:
-                self.load_file("default_map_options.json")
+                self.load_file("map_generator/default_map_options.yaml")
             except:
                 pass
 
@@ -95,16 +98,18 @@ class MapOptions(QDialog):
 
     def save_file(self, file_path):
         options_dict = self.to_dict()
+        # write dict in yaml format to file
+
         try:
             with open(file_path, "w") as f:
-                json.dump(options_dict, f, indent=4)
+                yaml.dump(options_dict, f, default_flow_style=False, allow_unicode=True)
         except Exception as e:
             print(f"Error saving options to file: {e}")
 
     def load_file(self, file_path):
         try:
             with open(file_path, "r") as f:
-                options_dict = json.load(f)
+                options_dict = yaml.safe_load(f)
             self.from_dict(options_dict)
         except Exception as e:
             print(f"Error loading options from file: {e}")
@@ -258,9 +263,12 @@ class Map:
             max_iterations=self.options.ransac_iterations,
             target_to_align=self.options.target_to_align,
             exclude_outliers=self.options.exclude_outliers,
+            ransac=self.options.ransac,
         )
 
     def _get_map_characteristics_pd(self):
+        if self.generator.map_characteristics is None:
+            self.generate_map()
         char = self.generator.map_characteristics
         data_frame_tmp = pd.DataFrame()
         data_frame_tmp["muscle"] = [self.muscle_name]
@@ -268,15 +276,52 @@ class Map:
         data_frame_tmp["y_cog"] = char["y_cog_list"]
         data_frame_tmp["area"] = char["area_list"]
         data_frame_tmp["volume"] = char["volume_list"]
-        data_frame_tmp["nb_sites"] = self.positions
-        data_frame_tmp["file_used"] = [self.files]
-        # data_frame_tmp["options"] = [self.options.to_dict()]
-        # data_frame_tmp["exclusions"] = [self.exclusions.get_exclusion_info(i) for i in range(len(self.files))]
+        data_frame_tmp["nb_sites"] = np.shape(self.generator.position)[0]
         return data_frame_tmp
 
-    def save(self, file_path):
+    def save(self, save_dir):
+        subdir = os.path.join(save_dir, self.muscle_name)
+        os.makedirs(subdir, exist_ok=True)
+        self.save_characteristics(subdir)
+        self.save_metadata(subdir)
+        self.save_map_image(subdir)
+        self.save_projection_image(subdir)
+
+    def save_map_image(self, save_dir):
+        ax = self.generator.plot(show=False)
+        ax.figure.tight_layout()
+        file_path = os.path.join(save_dir, f"{self.muscle_name}_map.png")
+        ax.figure.savefig(file_path, dpi=300)
+        plt.close()
+
+    def save_projection_image(self, save_dir):
+        ax = self.generator.plot_projection(show=False)
+        ax.figure.tight_layout()
+        file_path = os.path.join(save_dir, f"{self.muscle_name}_projection.png")
+        ax.figure.savefig(file_path, dpi=300)
+        plt.close()
+
+    def save_characteristics(self, save_dir):
         data_frame_tmp = self._get_map_characteristics_pd()
+        file_path = os.path.join(save_dir, f"{self.muscle_name}_map.csv")
         data_frame_tmp.to_csv(file_path, index=False)
+
+    def save_metadata(self, save_dir):
+        metadata = {
+            "muscle_name": str(self.muscle_name),
+            "files": self.files,
+            "options": self.options.to_dict(),
+        }
+        file_path = os.path.join(save_dir, f"{self.muscle_name}_metadata.yaml")
+        with open(file_path, "w") as f:
+            yaml.dump(metadata, f, default_flow_style=False, allow_unicode=True)
+
+        exclusion_info = {
+            os.path.basename(file): self.exclusions.get_exclusion_info(i) for i, file in enumerate(self.files)
+        }
+        exclusion_path = os.path.join(save_dir, f"{self.muscle_name}_exclusions.yaml")
+        with open(exclusion_path, "w") as f:
+            yaml.dump(exclusion_info, f, default_flow_style=False, allow_unicode=True)
 
     def plot(self, ax=None, show_projection=False):
         if not show_projection:
@@ -476,3 +521,209 @@ class SiteModificationPopup(QDialog):
                     {"remove_mep": remove_mep_checkbox.isChecked(), "remove_site": remove_site_checkbox.isChecked()}
                 )
         return file_info
+
+
+trans_names = ["Loc. X", "Loc. Y", "Loc. Z"]
+rot_names = ["m0n0", "m0n1", "m0n2", "m1n0", "m1n1", "m1n2", "m2n0", "m2n1", "m2n2"]
+
+
+class Converter(QDialog):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setWindowTitle("Convert Raw Data")
+        self._create_layout()
+
+    def _create_layout(self):
+        layout = QGridLayout()
+        self.input_file_label = QLabel("Description file:")
+        self.input_file_line_edit = QLineEdit()
+        self.input_file_button = QPushButton("Browse")
+        self.input_file_button.clicked.connect(self.browse_input_file)
+
+        self.signal_file_label = QLabel("Signal file:")
+        self.signal_file_line_edit = QLineEdit()
+        self.signal_file_button = QPushButton("Browse")
+        self.signal_file_button.clicked.connect(self.browse_signal_file)
+
+        self.brainsight_file_label = QLabel("Brainsight file:")
+        self.brainsight_file_line_edit = QLineEdit()
+        self.brainsight_file_button = QPushButton("Browse")
+        self.brainsight_file_button.clicked.connect(self.browse_brainsight_file)
+
+        self.convert_button = QPushButton("Convert")
+        self.convert_button.clicked.connect(self.convert)
+
+        layout.addWidget(self.input_file_label, 0, 0)
+        layout.addWidget(self.input_file_line_edit, 0, 1)
+        layout.addWidget(self.input_file_button, 0, 2)
+        layout.addWidget(self.signal_file_label, 1, 0)
+        layout.addWidget(self.signal_file_line_edit, 1, 1)
+        layout.addWidget(self.signal_file_button, 1, 2)
+        layout.addWidget(self.brainsight_file_label, 2, 0)
+        layout.addWidget(self.brainsight_file_line_edit, 2, 1)
+        layout.addWidget(self.brainsight_file_button, 2, 2)
+        layout.addWidget(
+            QLabel(
+                "The converted file will have the same name as the description file with '_converted.pkl' appended."
+            ),
+            3,
+            0,
+            1,
+            3,
+        )
+        layout.addWidget(self.convert_button, 4, 0, 1, 2)
+
+        self.setLayout(layout)
+
+    def browse_input_file(self):
+        from PyQt5.QtWidgets import QFileDialog
+
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "Select Description File", "", "Text Files (*.csv);;All Files (*)"
+        )
+        if file_name:
+            self.input_file_line_edit.setText(file_name)
+            self.check_files()
+
+    def browse_signal_file(self):
+        from PyQt5.QtWidgets import QFileDialog
+
+        file_name, _ = QFileDialog.getOpenFileName(self, "Select Signal File", "", "Text Files (*.mat);;All Files (*)")
+        if file_name:
+            self.signal_file_line_edit.setText(file_name)
+            self.check_files()
+
+    def browse_brainsight_file(self):
+        from PyQt5.QtWidgets import QFileDialog
+
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "Select Brainsight File", "", "Text Files (*.txt);;All Files (*)"
+        )
+        if file_name:
+            self.brainsight_file_line_edit.setText(file_name)
+            self.check_files()
+
+    def check_files(self):
+        input_file = self.input_file_line_edit.text()
+        signal_file = self.signal_file_line_edit.text()
+        brainsight_file = self.brainsight_file_line_edit.text()
+        if not input_file or not signal_file or not brainsight_file:
+            self.convert_button.setEnabled(False)
+        else:
+            self.convert_button.setEnabled(True)
+        return True
+
+    def convert(self):
+        brainsight_file_path = self.brainsight_file_line_edit.text()
+        signal_file_path = self.signal_file_line_edit.text()
+        description_file_path = self.input_file_line_edit.text()
+        sample_names, sample_roto_trans, target_names, target_positions, coordinate_system = self.parse_brainsight(
+            brainsight_file_path
+        )
+        array, chanel_names, frames, interval = MapGenerator().load_mat_file(signal_file_path)
+        time = np.arange(0, array.shape[-1], step=1) * interval
+        sample_roto_trans, target_positions, target_names, array, frames, sample_names = self.align_sample_to_frames(
+            description_file_path, sample_names, frames, sample_roto_trans, target_positions, target_names, array
+        )
+        self.output_file_path = os.path.splitext(description_file_path)[0] + "_converted.pkl"
+        if os.path.exists(self.output_file_path):
+            os.remove(self.output_file_path)
+        with open(self.output_file_path, "ab") as f:
+            for i in range(array.shape[0]):
+                dict_loaded = {
+                    "brainsight_data": {
+                        "position": sample_roto_trans[i].flatten(),
+                        "target_position": target_positions[i].flatten(),
+                        "target_name": target_names[i],
+                        "name": sample_names[i],
+                    },
+                    "signal_data": {
+                        "time": time[:, None],
+                        "data": array[i].T,
+                        "chanel_names": chanel_names,
+                        "frame_number": "frame " + str(frames[i]),
+                    },
+                }
+                pickle.dump(dict_loaded, f)
+        self.accept()
+
+    @staticmethod
+    def get_by_key(headers, parsed_data, key):
+        start_line = [i for i, name in headers if key in name]
+        if len(start_line) == 0:
+            print(f"No {key} data found in the file.")
+            names = None
+            roto_trans_data = None
+            assoc_target = []
+        else:
+            end_lines = [i + 1 for i, name in enumerate(headers) if key in name[1]]
+            end_lines = headers[end_lines[0]][0]
+            sub_headers = parsed_data[start_line[0]].split("\t")
+            assoc_target_idx = [s for s, sub in enumerate(sub_headers) if "Assoc. Target" in sub]
+            if len(assoc_target_idx) > 0:
+                assoc_target_idx = assoc_target_idx[0]
+            else:
+                assoc_target_idx = None
+            start_line = start_line[0] + 1
+            names = []
+            assoc_target = []
+            roto_trans_data = np.zeros((end_lines - start_line, 4, 4))
+            idx_trans = [s for s, sub in enumerate(sub_headers) if sub in trans_names]
+            idx_rot = [s for s, sub in enumerate(sub_headers) if sub in rot_names]
+            for l, line in enumerate(parsed_data[start_line:end_lines]):
+                names.append(line.split("\t")[0])
+                if assoc_target_idx is not None:
+                    assoc_target.append(line.split("\t")[assoc_target_idx])
+                roto_trans_data[l, :3, 3] = np.array(
+                    line.split("\t")[slice(idx_trans[0], idx_trans[-1] + 1)], dtype=float
+                )
+                roto_trans_data[l, :3, :3] = np.array(
+                    line.split("\t")[slice(idx_rot[0], idx_rot[-1] + 1)], dtype=float
+                ).reshape(3, 3)
+                roto_trans_data[l, 3, 3] = 1
+        if len(assoc_target) > 0:
+            return names, roto_trans_data, np.array(assoc_target)
+        else:
+            return names, roto_trans_data
+
+    @staticmethod
+    def match_position_to_target(target_names, target_roto_trans, assoc_targets):
+        matched_roto_trans = np.zeros((len(assoc_targets), 4, 4))
+        for t, target in enumerate(assoc_targets):
+            if target in target_names:
+                target_idx = target_names.index(target)
+                matched_roto_trans[t] = target_roto_trans[target_idx]
+        return assoc_targets, matched_roto_trans
+
+    def parse_brainsight(self, path):
+        with open(path, "r") as f:
+            data = f.read()
+        parsed_data = data.splitlines()
+        headers = [(i, name) for i, name in enumerate(parsed_data) if "#" in name]
+        coordinate_system = [name for i, name in headers if "Coordinate system" in name][0].split(":")[1].strip()
+        target_names, target_roto_trans = self.get_by_key(headers, parsed_data, "Target Name")
+        sample_names, sample_roto_trans, ass_targets = self.get_by_key(headers, parsed_data, "Sample Name")
+        target_names, target_positions = self.match_position_to_target(target_names, target_roto_trans, ass_targets)
+        return sample_names, sample_roto_trans, target_names, target_positions, coordinate_system
+
+    def align_sample_to_frames(
+        self, file, sample_names, frames, sample_roto_trans, target_positions, target_names, signal_data
+    ):
+        import pandas as pd
+
+        df = pd.read_csv(file)
+        frames_idxs = []
+        samples = []
+        sample_names_short = [s.split(" ")[1] for s in sample_names]
+        for frame, sample in zip(df["frames"], df["samples"]):
+            if str(sample) in sample_names_short and frame in frames:
+                samples.append(sample_names_short.index(str(sample)))
+                frames_idxs.append(frames.index(frame))
+        return (
+            sample_roto_trans[samples],
+            target_positions[samples],
+            target_names[samples],
+            signal_data[frames_idxs],
+            np.array(frames)[frames_idxs],
+            np.array(sample_names)[samples],
+        )

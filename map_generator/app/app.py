@@ -104,10 +104,10 @@ class App(QMainWindow):
         super().__init__()
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        # set max size
-        self.setMaximumSize(300, 200)
+        self.setFixedSize(600, 900)
         self.setWindowTitle("Motor map generator")
         self.log_box = LogBox()
+        self.log_box.setFixedHeight(100)
         self.log_queue = Queue()
         self._init_layout()
         self.targets = None
@@ -348,7 +348,6 @@ class App(QMainWindow):
         signal_directory = QLabel("Configuration file directory:")
         self.signal_directory_input = QLineEdit()
         signal_directory_button = QPushButton("Browse")
-
         signal_directory_button.clicked.connect(self.browse_folder)
         layout = QGridLayout()
         layout.addWidget(signal_label, 0, 0, 1, 2, QtCore.Qt.AlignCenter)
