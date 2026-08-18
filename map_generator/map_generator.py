@@ -290,10 +290,11 @@ class MapGenerator:
     def _load_from_wave_data(self, wave_data):
         items = list(wave_data[0][0].dtype.fields.keys())
         chanel_names = self._get_chan_names(wave_data[0][0][items.index("chaninfo")].reshape(-1))
+        interval = wave_data[0][0][items.index("interval")][0][0]
         frames = list(range(wave_data[0][0][items.index("frames")][0][0]))
         array = wave_data[0][0][items.index("values")]
         array = np.swapaxes(array, 0, -1)
-        return array, chanel_names, frames
+        return array, chanel_names, frames, interval
 
     def load_mat_file(self, path):
         try:
