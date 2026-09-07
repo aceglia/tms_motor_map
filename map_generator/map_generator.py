@@ -41,7 +41,9 @@ class MapGenerator:
         baseline = signal_array[baseline_frames[0] : baseline_frames[1], :, :]
         return baseline, mep_data
 
-    def process_peaks(self, peak_to_peak, mep_threeshold=None, std_threeshold=3.5, baseline=None, lag=None):
+    def process_peaks(
+        self, peak_to_peak, mep_threeshold=None, std_threeshold=3.5, baseline=None, lag=None, baseline_threshold=2
+    ):
         rms_baseline = np.sqrt(np.mean(baseline**2, axis=0))
         mean_base = np.nanmean(rms_baseline, axis=0)
         std_baseline = np.nanstd(rms_baseline, axis=0)
@@ -52,8 +54,8 @@ class MapGenerator:
         replace_by = np.nan
         mean = np.nanmean(all_mep)
         std = np.nanstd(all_mep)
-        lower = mean_base - 2 * std_baseline
-        upper = mean_base + 2 * std_baseline
+        lower = mean_base - baseline_threshold * std_baseline
+        upper = mean_base + baseline_threshold * std_baseline
         lower_p2p = mean - std_threeshold * std
         upper_p2p = mean + std_threeshold * std
 
@@ -75,31 +77,36 @@ class MapGenerator:
         return peak_to_peak
 
     def compute_map(
-        self, mep_data, baseline, points, n_point_grid, tiled=True, p2p=None, pseudo=False, smoothness=None
+        self,
+        mep_data,
+        baseline,
+        points,
+        n_point_grid,
+        tiled=True,
+        p2p=None,
+        pseudo=False,
+        smoothness=None,
+        mep_threshold=3.5,
+        baseline_threshold=2,
+        interp="nearest",
+        regularizer="gradient",
+        solver="normal",
+        extend="never",
+        autoscale="on",
     ):
         peak_to_peak = np.ptp(mep_data, axis=0) if p2p is None else p2p * 1e-6
-        # peak_to_peak = self.process_mep(np.ptp(mep_data, axis=0), baseline, mep_threeshold) if p2p is None else p2p
-        # peak_to_peak = np.ptp(mep_data, axis=0)
-        # import matplotlib.pyplot as plt
-        # plt.plot(peak_to_peak[0, :]*1e6)
-        # mean = np.nanmean(peak_to_peak[0, peak_to_peak[0, :]*1e6 > 50] * 1e6)
-        # std = np.nanstd(peak_to_peak[0, peak_to_peak[0, :]*1e6 > 50] * 1e6)
-        # plt.axhline(mean + 3.5 * std, color="r")
-        # plt.axhline(mean - 3.5 * std, color="r")
-        # plt.show()
-        # plt.plot(points[:, 0], points[:, 1])
-
         x_list, y_list, z_list = [], [], []
         xgf_list, ygf_list, zgf_list = [], [], []
         x_cog_list, y_cog_list = [], []
         area_list = []
         volume_list = []
-        # if "SCI" in self.data_name_base and not pseudo:
-        #     points[points[:, 1] > 34, 1] = np.nan
         for i in range(peak_to_peak.shape[0]):
-            std_threeshold = 3.5
             z = self.process_peaks(
-                peak_to_peak[i, :], mep_threeshold=None, std_threeshold=std_threeshold, baseline=baseline[:, i, :]
+                peak_to_peak[i, :],
+                mep_threeshold=None,
+                std_threeshold=mep_threshold,
+                baseline_threshold=baseline_threshold,
+                baseline=baseline[:, i, :],
             )
             x, y = points[:, 0].copy(), points[:, 1].copy()
             mask = np.isnan(x) | np.isnan(y) | np.isnan(z)
@@ -108,28 +115,12 @@ class MapGenerator:
             y[mask] = np.nan
             x_min, x_max = np.nanmin(x), np.nanmax(x)
             y_min, y_max = np.nanmin(y), np.nanmax(y)
-            # x_min, y_min = -30, -30
-            # x_max, y_max = 30, 30
-            # x = np.clip(x, x_min, x_max)
-            # y = np.clip(y, y_min, y_max)
-
             xi_fit = np.linspace(x_min, x_max, n_point_grid)
             yi_fit = np.linspace(y_min, y_max, n_point_grid)
-            # z[np.isnan(z)] = 0
-            # if (np.nanmax(z) - np.nanmin(z)) != 0:
-            #     normalized_z = (z - np.nanmin(z)) / (np.nanmax(z) - np.nanmin(z))
-            #     normalized_z *= 30
             scale_value = np.nanmax(np.hstack([x, y]))
             if np.nanmax(z) != 0:
                 normalized_z = z / np.nanmax(z)
                 normalized_z *= scale_value
-            # elif np.nanmax(z) != 0:
-            #     normalized_z =  ( z / np.nanmax(z) ) * 30
-            # else:
-            #     normalized_z = z
-            # normalized_z = z * 1e6
-            # to_divide = 1 if np.nanmax(z) == 0 else np.nanmax(z)
-            # normalized_z = z / to_divide
             smoothness = smoothness if smoothness is not None else 5
             if tiled:
                 gf = TiledGridFit(
@@ -139,9 +130,9 @@ class MapGenerator:
                     xnodes=xi_fit,
                     ynodes=yi_fit,
                     smoothness=smoothness,
-                    interp="triangle",
-                    regularizer="gradient",
-                    solver="normal",
+                    interp=interp,
+                    regularizer=regularizer,
+                    solver=solver,
                     tilesize=150,
                     overlap=0.35,
                 ).fit()
@@ -152,25 +143,17 @@ class MapGenerator:
                     normalized_z,
                     xi_fit,
                     yi_fit,
-                    extend="never",
+                    extend=extend,
                     smoothness=smoothness,
-                    interp="nearest",
-                    regularizer="gradient",
-                    solver="normal",
-                    autoscale="on",
+                    interp=interp,
+                    regularizer=regularizer,
+                    solver=solver,
+                    autoscale=autoscale,
                 ).fit()
 
             zgf = np.clip(gf.zgrid, a_min=0, a_max=gf.zgrid.max()) / scale_value
-            # factor = 1e6
-            # zgf = (zgf - np.nanmin(z * factor)) / (np.nanmax(z * factor) - np.nanmin(z * factor)) if np.nanmax(gf.zgrid) - np.nanmin(gf.zgrid) != 0 else zgf
-
             xgf = gf.xgrid
             ygf = gf.ygrid
-
-            # fig = plt.figure(figsize=(10, 6))
-            # ax = fig.add_subplot(111, projection='3d') # Use projection='3d'
-            # surf = ax.plot_surface(xgf, ygf, zgf, cmap='viridis', edgecolor='none')
-            # plt.show()
             if np.all(zgf == 0):
                 area, volume = 0, 0
                 x_cog, y_cog = 0, 0
@@ -179,7 +162,6 @@ class MapGenerator:
                     xgf.flatten(), ygf.flatten(), zgf.flatten(), n_tot=self.n_point_grid**2
                 )
                 x_cog, y_cog = get_cog(xgf.flatten(), ygf.flatten(), zgf.flatten())
-
             x_list.append(x)
             y_list.append(y)
             z_list.append(z)
@@ -206,13 +188,29 @@ class MapGenerator:
         return map_caracteristics
 
     def generate_map(
-        self, stimulation_time=1, windows=([50, 5], [18, 40]), n_point_grid=50, smoothness=None, tiled=False, **kwargs
+        self,
+        stimulation_time=1,
+        windows=([50, 5], [18, 40]),
+        n_point_grid=50,
+        smoothness=None,
+        tiled=False,
+        p2p_values=None,
+        **kwargs
     ):
         if isinstance(self.signal_array, list):
             self._stack_data()
         self.n_point_grid = n_point_grid
         rotated_points, mep_from_file, signal_array = self.get_projected_points(**kwargs)
         baseline, mep_data = self._get_baseline_mep(signal_array, stimulation_time=stimulation_time, windows=windows)
+        if p2p_values is not None:
+            points = self.position[:, 3, :3].copy()
+            idx_zero = np.where(np.all(points == 0, axis=1))[0]
+            mep_data_tmp = p2p_values.copy()
+            mep_data_tmp[idx_zero] = np.nan
+            idx_nan = np.where(np.isnan(p2p_values[0]))
+            p2p_values[0, idx_nan] = np.ptp(mep_data[..., idx_nan], axis=0) * 1e6
+            mep_from_file = p2p_values
+
         self.map_characteristics = self.compute_map(
             mep_data, baseline, rotated_points, n_point_grid, p2p=mep_from_file, tiled=tiled, smoothness=smoothness
         )
@@ -375,7 +373,7 @@ class MapGenerator:
     def _stack_data(self):
         idx = min(
             [si.shape[0] for si in self.signal_array]
-        )  # make sure number of sample are the same. Sometime with signal it migth differ
+        )  # make sure number of sample are the same. Sometime with signal it might differ
         self.signal_array = [si[:idx] for si in self.signal_array]
         self.signal_array = self._concat(self.signal_array, axis=-1)
         self.position = self._concat(self.position, axis=0)

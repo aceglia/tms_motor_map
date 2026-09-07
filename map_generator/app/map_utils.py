@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QDialog,
+    QFileDialog,
     QLineEdit,
     QLabel,
 )
@@ -19,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from ..map_generator import MapGenerator
+from ..utils import get_mep_from_excel
 
 
 class MapOptions(QDialog):
@@ -221,11 +223,9 @@ class MapOptions(QDialog):
 class Map:
     def __init__(self, muscle_name, files=None):
         self.muscle_name = muscle_name
-        self.frames = None
-        self.positions = None
-        self.target = None
         self.exclusions = Exclusion()
         self.options = MapOptions()
+        self.TMSLyzer_data = TMSLyzerHandler()
         self.files = files if files is not None else []
         self.generator = MapGenerator()
 
@@ -247,18 +247,28 @@ class Map:
             self.generator.target_position,
             self.generator.signal_array,
         )
+        self.TMSLyzer_data.init(len(self.generator.signal_array), self.generator.signal_array[0].shape[-1])
         self.generator._stack_data()
 
     def generate_map(self):
-        self.generator.position, self.generator.target_position, self.generator.signal_array = (
-            self.exclusions.apply_exclusion()
+        self.generator.position, self.generator.target_position, self.generator.signal_array, p2p = (
+            self.exclusions.apply_exclusion(p2p=self.TMSLyzer_data.get_p2p_array())
         )
+        p2p = self.generator._concat(p2p, axis=0)[None]
         self.generator.generate_map(
             stimulation_time=self.options.simulation_time,
             windows=(self.options.baseline_window, self.options.mep_window),
+            mep_threshold=self.options.std_factor_mep,
+            baseline_threshold=self.options.std_factor_baseline,
             n_point_grid=self.options.grid_points,
             smoothness=self.options.smoothness,
-            tiled=False,
+            interp=self.options.interp,
+            regularizer=self.options.regularizer,
+            solver=self.options.solver,
+            extend=self.options.extend,
+            autoscale=self.options.autoscale,
+            tile=self.options.tile,
+            p2p_values=p2p,
             threshold=self.options.ransac_threshold,
             max_iterations=self.options.ransac_iterations,
             target_to_align=self.options.target_to_align,
@@ -311,6 +321,7 @@ class Map:
             "muscle_name": str(self.muscle_name),
             "files": self.files,
             "options": self.options.to_dict(),
+            "TMSLyzer_files": self.TMSLyzer_data.get_files(),
         }
         file_path = os.path.join(save_dir, f"{self.muscle_name}_metadata.yaml")
         with open(file_path, "w") as f:
@@ -344,12 +355,12 @@ class FilesHandler(QWidget):
         self.exclude_buttons = []
         self.exclude_popup = None
         if files is not None:
-            self._init_files(files)
+            self.init_files(files)
 
     def _create_table(self):
         self.table_widget = QTableWidget()
-        self.table_widget.setColumnCount(2)
-        self.table_widget.setHorizontalHeaderLabels(["File name", "Exclude sites"])
+        self.table_widget.setColumnCount(4)
+        self.table_widget.setHorizontalHeaderLabels(["File name", "Exclude sites", "TMSLyzer file", "Clear TMSLyzer"])
         # self.add_file_button = QPushButton("Add file")
         # self.add_file_button.clicked.connect(self._on_add_file)
         # self.remove_file_button = QPushButton("Remove file")
@@ -374,6 +385,32 @@ class FilesHandler(QWidget):
         exclude_button = QPushButton("Exclude")
         exclude_button.clicked.connect(lambda checked=False, r=row_index: self._exclude_sites(r))
         self.table_widget.setCellWidget(row_index, 1, exclude_button)
+        tmslyzer_button = QPushButton("TMSLyzer")
+        tmslyzer_button.clicked.connect(lambda checked=False, r=row_index: self._open_tmslyzer(r))
+        self.table_widget.setCellWidget(row_index, 2, tmslyzer_button)
+        clear_tmslyzer_button = QPushButton("Clear TMSLyzer")
+        clear_tmslyzer_button.clicked.connect(lambda checked=False, r=row_index: self._clear_tmslyzer(r))
+        self.table_widget.setCellWidget(row_index, 3, clear_tmslyzer_button)
+
+    def _open_tmslyzer(self, row_idx):
+        file_name = QFileDialog.getOpenFileName(
+            self, "Select TMSLyzer file", "", "TMSLyzer analysis Files (*.xlsx);;All Files (*)"
+        )[0]
+        if file_name:
+            signal_frames = [
+                int(frame.split(" ")[1])
+                for frame in self.parent.current_map.generator.all_data[row_idx]["signal_data"]["frame_number"]
+            ]
+            self.parent.current_map.TMSLyzer_data.read_file(file_name, row_idx, signal_frames)
+            if self.parent.current_map.muscle_name != self.parent.current_map.TMSLyzer_data.muscle_name:
+                self.parent.parent.log_queue.put_nowait(
+                    f"WARNING: The current muscle ({self.parent.current_map.muscle_name}) is different than the one detected from TMSLyzer file ({self.parent.TMSLyzer_data.muscle_name})"
+                )
+            self.parent._generate_map()
+
+    def _clear_tmslyzer(self, row_idx):
+        self.parent.current_map.TMSLyzer_data.clear_data(row_idx)
+        self.parent._generate_map()
 
     def _exclude_sites(self, row_idx):
         if self.exclude_popup is None:
@@ -384,7 +421,7 @@ class FilesHandler(QWidget):
             self.parent.parent.log_queue.put_nowait(f"Applying exlusion...")
             self.parent._generate_map()
 
-    def set_files(self, files, exclusions=None):
+    def set_files(self, files, exclusions=None, TMSLyzer_data=None):
         self._reinitialize_table()
         self.exclusions = exclusions if exclusions is not None else []
         for file in files:
@@ -421,17 +458,21 @@ class Exclusion:
         self.signal_array = []
         self.target_position = []
         self.position = []
+        self.p2p_array = []
 
     @staticmethod
     def _copy(list_object):
-        return [mat.copy() for mat in list_object]
+        return [mat.copy() if mat is not None else mat for mat in list_object]
 
-    def apply_exclusion(self):
+    def apply_exclusion(self, p2p=None):
         position, target, signal = (
             self._copy(self.position),
             self._copy(self.target_position),
             self._copy(self.signal_array),
         )
+        if p2p is not None:
+            p2p = self._copy(p2p)
+
         for i in range(len(self.signal_frames)):
             for k in range(len(self.brainsight_samples[i])):
                 if self.excluded_frame[i][k] or self.excluded_sample[i][k]:
@@ -439,7 +480,9 @@ class Exclusion:
                 if self.excluded_sample[i][k]:
                     position[i][k, ...] = np.nan
                     target[i][k, ...] = np.nan
-        return position, target, signal
+                    if p2p is not None:
+                        p2p[i][k, ...] = np.nan
+        return position, target, signal, p2p
 
     def init(self, all_data, positions, target_position, signal_array):
         self.signal_frames = [d["signal_data"]["frame_number"] for d in all_data]
@@ -465,6 +508,69 @@ class Exclusion:
     def set_exclusion_info(self, infos, idx):
         self.excluded_frame[idx] = [info["remove_mep"] for info in infos["checkboxes"]]
         self.excluded_sample[idx] = [info["remove_site"] for info in infos["checkboxes"]]
+
+
+class TMSLyzerHandler:
+    def __init__(self):
+        self.frames = None
+        self.p2p = None
+        self.muscle_name = None
+        self.file_names = None
+        self.n_frames = 0
+
+    def init(self, n_files, n_frames):
+        self.n_frames = n_frames
+        self.frames = [[np.nan for _ in range(n_frames)] for _ in range(n_files)]
+        self.p2p = [[np.nan for _ in range(n_frames)] for _ in range(n_files)]
+        self.file_names = [None for _ in range(n_files)]
+        self.muscle_name = None
+
+    def read_file(self, file_path, idx, signal_frames):
+        if os.path.exists(file_path):
+            self.file_names[idx] = file_path
+            data_tmp = pd.read_excel(file_path, sheet_name=1)
+            file_infos = data_tmp.values[0]
+            muscle_name = file_infos[1]
+            headers = data_tmp.values[18]
+            mep_found_idx = headers.tolist().index("Found")
+            data_glob = data_tmp.values[21:-1]
+            frame_idx = headers.tolist().index("Frame")
+            mep_idx = headers.tolist().index("Pk to Pk")
+            frames_tmp = data_glob[:, frame_idx]
+            mep_tmp = data_glob[:, mep_idx].astype(float)
+            is_mep = data_glob[:, mep_found_idx] > 0
+            mep_tmp[is_mep == False] = 0
+
+            frames_tmp, mep_tmp = self.reorder_from_signal(frames_tmp, mep_tmp, signal_frames)
+
+            self.frames[idx] = frames_tmp
+            self.p2p[idx] = mep_tmp
+            if self.muscle_name is not None and muscle_name != self.muscle_name:
+                self.parent.parent.log_queue.put_nowait(f"WARNING: you selected TMSLyzer files with different muscles")
+            self.muscle_name = muscle_name
+            return frames_tmp, mep_tmp, muscle_name
+        else:
+            self.parent.parent.log_queue.put_nowait(f"TMSLyzer file {file_path} does not exist.")
+            return None, None, None
+
+    def reorder_from_signal(self, tms_frames, p2p, signal_frames):
+        idx_list = [np.where(signal_frames[j] == tms_frames)[0][0] for j in range(len(signal_frames))]
+        new_frames = tms_frames[idx_list]
+        new_p2p = p2p[idx_list]
+        return new_frames, new_p2p
+
+    def clear_data(self, idx):
+        self.frames[idx] = [np.nan for _ in range(self.n_frames)]
+        self.file_names[idx] = [None]
+        self.p2p[idx] = [np.nan for _ in range(self.n_frames)]
+
+    def get_p2p_array(self, idx=None):
+        if idx is not None:
+            return self.p2p[idx]
+        return self.p2p
+
+    def get_files(self):
+        return self.file_names
 
 
 class SiteModificationPopup(QDialog):

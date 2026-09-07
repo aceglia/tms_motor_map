@@ -106,22 +106,6 @@ class MapWindow(QMainWindow):
             self.parent.log_queue.put_nowait(f"Loading converted data...")
             self.load_files(file_names=[converter_window.output_file_path])
 
-    # def _exclude_sites(self, row_index):
-    #     if self.exclude_popup is None:
-    #         self.exclude_popup = SiteModificationPopup(self)
-    #     self.exclude_popup._populate_table(
-    #         [
-    #             {
-    #                 "file_name": self.table_widget.item(row_index, 0).text(),
-    #                 "signal_frames": [],
-    #                 "brainsight_samples": [],
-    #                 "checkboxes": [],
-    #             }
-    #         ]
-    #     )
-    #     if self.exclude_popup.exec_() == QDialog.Accepted:
-    #         self.exclude_buttons[row_index]["excluded"] = self.exclude_popup.get_modifications()
-
     def _init_layout(self):
         self.layout = QGridLayout()
         self.plot_wind = QWidget()
@@ -207,7 +191,8 @@ class MapWindow(QMainWindow):
             self.map_options_button.setEnabled(True)
             self.save_map_button.setEnabled(True)
             exclusions = self.current_map.exclusions
-            self.table_widget.set_files(file_names, exclusions)
+            tmslyzer = self.current_map.TMSLyzer_data
+            self.table_widget.set_files(file_names, exclusions, tmslyzer)
             self.file_initialized = True
             if len(self.maps) > 1:
                 self.prev_button.setEnabled(True)
@@ -218,7 +203,7 @@ class MapWindow(QMainWindow):
         if not self.file_initialized:
             return
         self.current_muscle_idx = index
-        self.table_widget.set_files(self.files, self.current_map.exclusions)
+        self.table_widget.set_files(self.files, self.current_map.exclusions, self.current_map.TMSLyzer_data)
         self._update_plot()
 
     def check_files(self, files):
@@ -256,10 +241,18 @@ class MapWindow(QMainWindow):
             for map_obj in self.maps[self.current_map_index]:
                 if map_obj.muscle_name == muscle_name:
                     map_obj.options.from_dict(metadata.get("options", {}))
+                    tms_lyzer_files = metadata.get("TMSLyzer_files", "")
+                    for idx, file in enumerate(tms_lyzer_files):
+                        if file is None:
+                            continue
+                        signal_frames = [
+                            int(frame.split(" ")[1])
+                            for frame in self.current_map.generator.all_data[idx]["signal_data"]["frame_number"]
+                        ]
+                        map_obj.TMSLyzer_data.read_file(tms_lyzer_files[idx], idx, signal_frames)
                     for i, key in enumerate(exclusions.keys()):
                         exclusion = exclusions[key]
                         map_obj.exclusions.set_exclusion_info(exclusion, i)
-
         self.parent.log_queue.put_nowait("Metadata applied successfully.")
 
     def _generate_map(self):

@@ -104,7 +104,7 @@ class App(QMainWindow):
         super().__init__()
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        self.setFixedSize(600, 900)
+        # self.setFixedSize(600, 900)
         self.setWindowTitle("Motor map generator")
         self.log_box = LogBox()
         self.log_box.setFixedHeight(100)
