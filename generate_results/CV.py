@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     seeds = [0]
     smooth_1 = [6]
     smooth_2 = [6]

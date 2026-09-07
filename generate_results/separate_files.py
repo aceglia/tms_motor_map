@@ -24,5 +24,3 @@ if __name__ == "__main__":
         np.unique(g_s[idxs])
         for g_smo in g_s[idxs]:
             folder_tmp = os.path.join(main_dir, "smooth_{}")
-
-

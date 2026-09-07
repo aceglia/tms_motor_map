@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-
 def plot_single_map(x, y, zgf, ax=None, n_point_grid=50, x_cog=None, y_cog=None, x_real=None, y_real=None):
     if ax is None:
         _, ax = plt.subplots()
@@ -63,17 +62,21 @@ if __name__ == "__main__":
             data_frame_tot = pd.concat([data_frame_tot, data_frame_tmp])
 
     min_maps = pd.read_csv(os.path.join(result_dir, "maps_min_map.csv"))
-    list_points_tot = [
-        [49, 98, 147, 196, 245],
-        # [34, 64, 94, 124, 154, 184],
-        # [34, 64, 94, 124, 154, 184]
-        [24, 44, 64, 84, 104, 124, 144, 164, 184],
-        [24, 44, 64, 84, 104, 124, 144, 164, 184],
-    ] if not sci else [
-        [49, 98, 147, 196],
-        [24, 44, 64, 84, 104, 124, 144, 164, 184],
-        [24, 44, 64, 84, 104, 124, 144, 164, 184],
-    ]
+    list_points_tot = (
+        [
+            [49, 98, 147, 196, 245],
+            # [34, 64, 94, 124, 154, 184],
+            # [34, 64, 94, 124, 154, 184]
+            [24, 44, 64, 84, 104, 124, 144, 164, 184],
+            [24, 44, 64, 84, 104, 124, 144, 164, 184],
+        ]
+        if not sci
+        else [
+            [49, 98, 147, 196],
+            [24, 44, 64, 84, 104, 124, 144, 164, 184],
+            [24, 44, 64, 84, 104, 124, 144, 164, 184],
+        ]
+    )
     # for participant in data_frame_tot['participant'].unique():
     participant_to_plot = "008_TN" if not sci else "004_TN_SCI"
     n_to_plot = [[49, -1, 245], [24, -1, 184]] if not sci else [[49, -1, 196], [24, -1, 184]]
@@ -82,13 +85,13 @@ if __name__ == "__main__":
     fig = plt.figure(constrained_layout=True, num=participant_to_plot)
     cond_y_label = ["Grid", "Pseudo-random"]
     subfigs = fig.subfigures(nrows=2, ncols=2)
-    titles = ['First', 'Tailored', 'Full-size']
+    titles = ["First", "Tailored", "Full-size"]
     for c, cond in enumerate(["grid", "pseudo"]):
         for r, muscle in enumerate(["sup", "ext_comm"]):
             if r == 0:
                 subfigs[r, c].suptitle(f"{cond_y_label[c]}", fontsize=bigger + 2)
             fig.supylabel(f"POST-ANT (mm)", fontsize=bigger)
-            fig.supxlabel(f"LAT-MED (mm)" , fontsize=bigger)
+            fig.supxlabel(f"LAT-MED (mm)", fontsize=bigger)
             axes = subfigs[r, c].subplots(nrows=1, ncols=len(n_to_plot[c]))
             prev_maps = None
             for m, map_number in enumerate(n_to_plot[c]):

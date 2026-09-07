@@ -18,7 +18,7 @@ def plot(df, x, y, hue=None, name="", ax=None, pseudo=False, legend=True, palett
         plt.figure(name)
         ax = plt.gca()
     sns.lineplot(
-        df, #.loc[df["muscle"] == muscle_name[j]],
+        df,  # .loc[df["muscle"] == muscle_name[j]],
         x=x,
         y=y,
         hue=hue,
@@ -169,8 +169,8 @@ def main(args):
                     ax.legend(handles, ["Grid", "Pseudo"], title="", frameon=False, fontsize=font_base)
                 # ax.set_yticklabels([np.round(i, 2) for i in ax.get_yticks()], fontsize=small)
                 # ax.set_xticklabels([np.round(i, 2) for i in ax.get_xticks()], fontsize=small)
-                ax.tick_params(axis='x', labelrotation=0, labelsize=small)
-                ax.tick_params(axis='y', labelrotation=0, labelsize=small)
+                ax.tick_params(axis="x", labelrotation=0, labelsize=small)
+                ax.tick_params(axis="y", labelrotation=0, labelsize=small)
                 # if k == 0:
                 #     colors = [patch.get_edgecolor()[0][:-1].tolist() for patch in ax.collections]
                 # if k == 0:
@@ -220,16 +220,16 @@ def main(args):
                 colors[1] + [0.6],
                 colors[1] + [0.2],
             ]
-            if 'sci' in save_path:
+            if "sci" in save_path:
                 sns.barplot(
-                y="min_map_number",
-                x="condition",
-                hue="muscle",
-                data=pd_maps.loc[pd_maps.muscle != 'fdi'],
-                ax=ax,
-                legend=False,
-                gap=0.2,
-                palette=sns.color_palette(colors_violin),
+                    y="min_map_number",
+                    x="condition",
+                    hue="muscle",
+                    data=pd_maps.loc[pd_maps.muscle != "fdi"],
+                    ax=ax,
+                    legend=False,
+                    gap=0.2,
+                    palette=sns.color_palette(colors_violin),
                 )
                 count = 0
                 for c, cont in enumerate(ax.containers):
@@ -239,29 +239,29 @@ def main(args):
                 pos_x = [-0.2, 0.2, 0.8, 1.2]
                 # pos_y = [175, 175, 130, 130]
                 offset = 20
-                pseudo_pos = pd_maps.loc[pd_maps['condition'] == "pseudo"].min_map_number.max() + offset
-                grid_pos = pd_maps.loc[pd_maps['condition'] == "grid"].min_map_number.max() + offset
+                pseudo_pos = pd_maps.loc[pd_maps["condition"] == "pseudo"].min_map_number.max() + offset
+                grid_pos = pd_maps.loc[pd_maps["condition"] == "grid"].min_map_number.max() + offset
                 pos_y = [grid_pos, grid_pos, pseudo_pos, pseudo_pos]
                 text = ["EDC", "SUP", "EDC", "SUP"]
             else:
-                sns.violinplot(y="min_map_number", x="condition", hue="muscle", data=pd_maps, ax=ax, legend=False, cut=0)
+                sns.violinplot(
+                    y="min_map_number", x="condition", hue="muscle", data=pd_maps, ax=ax, legend=False, cut=0
+                )
                 for p, patch in enumerate(ax.collections):
                     patch.set_facecolor(colors_violin[p])
                 pos_x = [-0.27, 0, 0.27, 0.73, 1, 1.27]
                 offset = 20
-                pseudo_pos = pd_maps.loc[pd_maps['condition'] == "pseudo"].min_map_number.max() + offset
-                grid_pos = pd_maps.loc[pd_maps['condition'] == "grid"].min_map_number.max() + offset
+                pseudo_pos = pd_maps.loc[pd_maps["condition"] == "pseudo"].min_map_number.max() + offset
+                grid_pos = pd_maps.loc[pd_maps["condition"] == "grid"].min_map_number.max() + offset
                 pos_y = [grid_pos, grid_pos, grid_pos, pseudo_pos, pseudo_pos, pseudo_pos]
                 text = ["FDI", "EDC", "SUP", "FDI", "EDC", "SUP"]
-
 
             ax.set_ylim(ax.get_ylim()[0], max(pos_y) + 20)
             ax.set_ylabel("Optimal stimulation number", fontsize=big)
             yticks = ["Grid", "Pseudo-random"]
             ax.set_xticklabels([yticks[i] for i in ax.get_xticks()], fontsize=big)
-            ax.tick_params(axis='y', labelrotation=0, labelsize=small)
+            ax.tick_params(axis="y", labelrotation=0, labelsize=small)
 
-            
             for t, te in enumerate(text):
                 ax.text(pos_x[t], pos_y[t], te, ha="center", color=colors_violin[t][:-1] + [1], fontsize=font_base)
             ax.set_xlabel("")
@@ -281,7 +281,7 @@ def main(args):
 if __name__ == "__main__":
     seeds = [0]
     smooth_1 = [6]
-    smooth_2 =  [6]
+    smooth_2 = [6]
     all_folder = []
     for s in seeds:
         for s1 in smooth_1:
@@ -293,7 +293,7 @@ if __name__ == "__main__":
             os.path.join(result_dir, "maps_values.bio"),
             os.path.join(result_dir, "maps_characteristics.csv"),
             os.path.join(result_dir, "maps_results.png"),
-            os.path.join(result_dir, "maps_min_map.csv")
+            os.path.join(result_dir, "maps_min_map.csv"),
         )
         for result_dir in all_folder
     ]
