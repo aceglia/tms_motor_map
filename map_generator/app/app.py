@@ -22,8 +22,6 @@ from PyQt5.QtWidgets import (
     QRadioButton,
 )
 import numpy as np
-
-# from app.packet_wrapper import BrainsightWrapper
 from .packet_wrapper import BrainsightWrapper
 from .map_widget import MapWindow
 

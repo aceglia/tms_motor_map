@@ -20,7 +20,20 @@ import numpy as np
 import pandas as pd
 
 from ..map_generator import MapGenerator
-from ..utils import get_mep_from_excel
+
+import sys
+from pathlib import Path
+
+
+def get_config_path():
+    if getattr(sys, "frozen", False):
+        # PyInstaller application
+        app_dir = Path(sys.executable).parent
+    else:
+        # Normal Python execution
+        app_dir = Path(__file__).resolve().parent
+
+    return app_dir
 
 
 class MapOptions(QDialog):
@@ -54,11 +67,18 @@ class MapOptions(QDialog):
         self.mep_window_input = None
         self.target_to_align_input = None
         self._create_layout()
-        if os.path.exists("map_generator/default_map_options.yaml"):
+        self.find_config_file()
+
+    def find_config_file(self):
+        app_dir = get_config_path()
+        print(app_dir)
+        if os.path.exists(os.path.join(app_dir,"default_map_options.yaml")):
+            print(os.path.join(app_dir,"default_map_options.yaml"))
             try:
-                self.load_file("map_generator/default_map_options.yaml")
+                self.load_file(os.path.join(app_dir,"default_map_options.yaml"))
             except:
                 pass
+        return 
 
     def to_dict(self):
         return {
@@ -561,7 +581,7 @@ class TMSLyzerHandler:
 
     def clear_data(self, idx):
         self.frames[idx] = [np.nan for _ in range(self.n_frames)]
-        self.file_names[idx] = [None]
+        self.file_names[idx] = None
         self.p2p[idx] = [np.nan for _ in range(self.n_frames)]
 
     def get_p2p_array(self, idx=None):

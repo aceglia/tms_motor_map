@@ -1,8 +1,4 @@
 import threading
-
-# from app.BrainsightNetworkLibrary import BrainsightCommunicator
-# from app.enums import COMMAND, COORDINATE_SYSTEM, STREAM, ERROR_TYPE
-
 from .BrainsightNetworkLibrary import BrainsightCommunicator
 from .enums import COMMAND, COORDINATE_SYSTEM, STREAM, ERROR_TYPE
 from queue import Queue
