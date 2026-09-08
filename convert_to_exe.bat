@@ -8,7 +8,7 @@ rmdir /s /q dist 2>nul
 
 echo.
 echo Building application...
-pyinstaller --clean app.spec
+pyinstaller app.spec
 
 if errorlevel 1 (
     echo.

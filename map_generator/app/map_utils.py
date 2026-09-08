@@ -27,10 +27,8 @@ from pathlib import Path
 
 def get_config_path():
     if getattr(sys, "frozen", False):
-        # PyInstaller application
         app_dir = Path(sys.executable).parent
     else:
-        # Normal Python execution
         app_dir = Path(__file__).resolve().parent
 
     return app_dir
@@ -71,14 +69,12 @@ class MapOptions(QDialog):
 
     def find_config_file(self):
         app_dir = get_config_path()
-        print(app_dir)
-        if os.path.exists(os.path.join(app_dir,"default_map_options.yaml")):
-            print(os.path.join(app_dir,"default_map_options.yaml"))
+        if os.path.exists(os.path.join(app_dir, "default_map_options.yaml")):
             try:
-                self.load_file(os.path.join(app_dir,"default_map_options.yaml"))
+                self.load_file(os.path.join(app_dir, "default_map_options.yaml"))
             except:
                 pass
-        return 
+        return
 
     def to_dict(self):
         return {
