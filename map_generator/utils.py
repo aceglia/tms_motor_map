@@ -6,7 +6,7 @@ import pandas as pd
 
 
 def get_idx_to_rotate(target_names, points_local, target_to_align=None, **kwargs):
-    grid_name = target_names[0].split(" ")[0]
+    grid_name = target_names[0].split("(")[0].strip()
 
     coords = []
     for name in target_names:

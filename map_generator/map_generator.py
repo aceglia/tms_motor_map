@@ -206,7 +206,7 @@ class MapGenerator:
             points = self.position[:, 3, :3].copy()
             idx_zero = np.where(np.all(points == 0, axis=1))[0]
             mep_data_tmp = p2p_values.copy()
-            mep_data_tmp[idx_zero] = np.nan
+            mep_data_tmp[:, idx_zero] = np.nan
             idx_nan = np.where(np.isnan(p2p_values[0]))
             p2p_values[0, idx_nan] = np.ptp(mep_data[..., idx_nan], axis=0) * 1e6
             mep_from_file = p2p_values
