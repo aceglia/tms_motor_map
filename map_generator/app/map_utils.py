@@ -263,7 +263,8 @@ class Map:
             self.generator.target_position,
             self.generator.signal_array,
         )
-        self.TMSLyzer_data.init(len(self.generator.signal_array), self.generator.signal_array[0].shape[-1])
+        nb_frames = [ar.shape[-1] for ar in self.generator.signal_array]
+        self.TMSLyzer_data.init(nb_frames)
         self.generator._stack_data()
 
     def generate_map(self):
@@ -534,11 +535,11 @@ class TMSLyzerHandler:
         self.file_names = None
         self.n_frames = 0
 
-    def init(self, n_files, n_frames):
+    def init(self, n_frames):
         self.n_frames = n_frames
-        self.frames = [[np.nan for _ in range(n_frames)] for _ in range(n_files)]
-        self.p2p = [[np.nan for _ in range(n_frames)] for _ in range(n_files)]
-        self.file_names = [None for _ in range(n_files)]
+        self.frames = [[np.nan for _ in range(n_frame)] for n_frame in n_frames]
+        self.p2p = [[np.nan for _ in range(n_frame)] for n_frame in n_frames]
+        self.file_names = [None for _ in range(len(n_frames))]
         self.muscle_name = None
 
     def read_file(self, file_path, idx, signal_frames):
