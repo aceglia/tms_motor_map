@@ -833,8 +833,9 @@ class Converter(QDialog):
         self, file, sample_names, frames, sample_roto_trans, target_positions, target_names, signal_data
     ):
         import pandas as pd
-
-        df = pd.read_csv(file)
+        df = pd.read_csv(file, nrows=5)
+        sep = ';' if df.shape[1] == 1 else ','
+        df = pd.read_csv(file, sep=sep)
         frames_idxs = []
         samples = []
         sample_names_short = [s.split(" ")[1] for s in sample_names]
