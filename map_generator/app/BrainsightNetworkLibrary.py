@@ -39,6 +39,7 @@ class BrainsightCommunicator:
         print("Trying to connect to:", self._hostname, self._port)
 
         success = False
+        exception = None
 
         if self._socket is None:
             try:
@@ -58,11 +59,12 @@ class BrainsightCommunicator:
                 self._socket = None
                 self._read_buffer = None
                 print("Failed to connect:", e)
+                exception = e
 
         else:
             print("Already connected.")
 
-        return success
+        return success, exception
 
     def disconnect(self):
 

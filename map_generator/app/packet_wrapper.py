@@ -196,8 +196,12 @@ class BrainsightWrapper(BrainsightCommunicator):
             f.write(f"{self.samples[-1].to_dict()}\n")
 
     def connect(self):
-        super().connect()
-        self.print_log("CONNECTION", name="Connected to brainsight")
+        success, exception = super().connect()
+        if success:
+            self.print_log("CONNECTION", name="Connected to brainsight")
+        else:
+            self.print_log("CONNECTION", name=f"Failed to connect to brainsight: {exception}")
+        return success, exception
 
     def start(self):
         self.thread.start()

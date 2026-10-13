@@ -111,9 +111,12 @@ class App(QMainWindow):
         self.targets = None
         self.config_file_name = None
         self.target_idx = 0
+        self.target = None
+        self.runing_thread = None
+        self._new_file_thread = None
         self.new_file_event = threading.Event()
+        self.sample_event = None
         self.stop_event = threading.Event()
-        self.is_running = False
         self.save_directory_base = None
         self.trial_aborted = False
         self.trial_finished = False
@@ -127,11 +130,11 @@ class App(QMainWindow):
 
     def exception_handler(self):
         try:
-            self.log_box.log(self.log_queue.get_nowait())
+            while True:
+                message = self.log_queue.get_nowait()
+                self.log_box.log(str(message))
         except:
             pass
-        if self.stop_event.is_set() and self.is_running:
-            self.stop()
 
     def _init_layout(self):
         self.run_button = QPushButton("Run")
@@ -208,7 +211,7 @@ class App(QMainWindow):
             config = json.load(f)
         self.config_file_name = file_name
         self._from_dict(config)
-        # self._set_save_directory()
+        self._set_save_directory()
 
     def _save_configuration(self):
         if self.config_file_name is None:
@@ -287,13 +290,7 @@ class App(QMainWindow):
             self.sample_event = self.brainsight.sample_event
 
         if not self.brainsight.is_connected():
-            try:
-                self.brainsight.connect()
-                self.print_log(
-                    f"SUCCESS: Connected to Brainsight at: {self.brainsight_adress_input.text()}:{self.brainsight_port_input.text()}"
-                )
-            except Exception as e:
-                self.print_log(f"Error connecting to Brainsight: {e}")
+            self.brainsight.connect()
         else:
             self.print_log(
                 f"SUCCESS: Already connected to Brainsight at: {self.brainsight_adress_input.text()}:{self.brainsight_port_input.text()}"
@@ -310,8 +307,6 @@ class App(QMainWindow):
         target_window.show()
 
     def _check_new_file(self):
-        self._set_save_directory()
-
         dir_to_check = os.path.join(self.save_directory_base, "_data_tmp")
 
         def list_dir(dir_to_check):
@@ -321,7 +316,7 @@ class App(QMainWindow):
 
         seen_files = set(list_dir(dir_to_check))
 
-        while True:
+        while not self.stop_event.is_set():
             current_files = set(list_dir(dir_to_check))
             new_files = current_files - seen_files
             if new_files:
@@ -332,13 +327,9 @@ class App(QMainWindow):
                 if "finished" in self.last_signal_file:
                     self.sample_event.set()
                     self.trial_finished = True
-                    break
                 elif "aborted" in self.last_signal_file:
                     self.sample_event.set()
                     self.trial_aborted = True
-                    break
-            if self.stop_event.is_set():
-                break
             time.sleep(0.1)
 
     def _signal_layout(self):
@@ -402,53 +393,62 @@ class App(QMainWindow):
         self.targets_config_input.setText(file_name)
 
     def _run_thread(self):
-        while True:
+        while not self.stop_event.is_set():
             if self.target_idx < len(self.targets) - 1:
                 self.target_idx += 1
             self.sample_event.wait()
             self.sample_event.clear()
-            if self.is_running:
-                if self.targets is not None:
-                    self.brainsight.set_target(name=self.targets[self.target_idx])
-                sample = self.brainsight.stream_packet.sample
+            if self.stop_event.is_set():
+                break
+            if self.targets is not None:
+                self.brainsight.set_target(name=self.targets[self.target_idx])
+
+            sample = self.brainsight.stream_packet.sample
             self.new_file_event.wait()
             self.new_file_event.clear()
-            if self.is_running:
-                last_signal_data = self.last_signal_file
-                self.print_log(f"New data : Sample : {sample.name}, signal file : {last_signal_data}")
-                if "aborted" in last_signal_data:
-                    self.print_log(f"TRIAL: Trial aborted, all data  will be deleted.")
-                    break
-                elif "finished" in last_signal_data:
-                    self.print_log(f"TRIAL: Trial finished, saving data...")
-                    self._save_final_files()
-                    break
-                else:
-                    self.add_data_to_files(last_signal_data, sample)
-            else:
-                break
-            # else:
-            #     self._save_final_files()
-            #     break
 
-        if os.path.exists(os.path.join(self.save_directory_base, "_data_tmp")):
-            shutil.rmtree(os.path.join(self.save_directory_base, "_data_tmp"), ignore_errors=True)
-        self.stop_event.set()
+            if self.stop_event.is_set():
+                break
+            last_signal_data = self.last_signal_file
+            self.print_log(f"New data : Sample : {sample.name}, signal file : {last_signal_data}")
+            if "aborted" in last_signal_data:
+                self.print_log(f"TRIAL: Trial aborted, all data  will be deleted.")
+                # empty temporary directory
+                try:
+                    shutil.rmtree(os.path.join(self.save_directory_base, "_data_tmp"), ignore_errors=True)
+                    os.makedirs(os.path.join(self.save_directory_base, "_data_tmp"), exist_ok=True)
+                except Exception as e:
+                    self.print_log(f"ERROR: Error while deleting temporary files - {e}")
+
+            elif "finished" in last_signal_data:
+                self.print_log(f"TRIAL: Trial finished, saving data...")
+                try:
+                    self._save_final_files()
+                    try:
+                        shutil.rmtree(os.path.join(self.save_directory_base, "_data_tmp"), ignore_errors=True)
+                        os.makedirs(os.path.join(self.save_directory_base, "_data_tmp"), exist_ok=True)
+                    except Exception as e:
+                        self.print_log(f"ERROR: Error while deleting temporary files - {e}")
+                except Exception as e:
+                    self.print_log(f"ERROR: Error while saving data - {e}")
+            else:
+                try:
+                    self.add_data_to_files(last_signal_data, sample)
+                except Exception as e:
+                    self.print_log(f"ERROR: Error while processing last sample - {e}")
 
     def run(self):
         self.stop_event.clear()
+        self.new_file_event.clear()
+        if self.sample_event is not None:
+            self.sample_event.clear()
+
         self._save_configuration()
         self._load_configuration(from_self=True)
-        # try:
         self.next_target_button.setEnabled(True)
         self.prev_target_button.setEnabled(True)
         self.run_button.setEnabled(False)
-        # self.stop_button.setEnabled(True)
         self.quit_button.setEnabled(True)
-
-        self._new_file_thread = threading.Thread(target=self._check_new_file, daemon=True)
-        self._new_file_thread.start()
-
         if self.brainsight is None:
             self.brainsight = BrainsightWrapper(
                 self.brainsight_adress_input.text(), self.brainsight_port_input.text(), timeout=1, logbox=self.log_queue
@@ -464,7 +464,8 @@ class App(QMainWindow):
                 )
             except Exception as e:
                 self.print_log(f"CONNECTION: Error connecting to BrainSight - {e}")
-                # self.stop()
+                self.run_button.setEnabled(True)
+                self.stop_event.set()
                 return
 
         self.load_targets_config()
@@ -475,10 +476,14 @@ class App(QMainWindow):
         elif self.targets is None:
             self.brainsight.set_target(index=[0])
 
-        self.is_running = True
+        self._new_file_thread = threading.Thread(target=self._check_new_file, daemon=True)
+        self._new_file_thread.start()
 
-        self.runing_thread = threading.Thread(target=self._run_thread, daemon=True).start()
-        # self._run_thread()
+        self.runing_thread = threading.Thread(
+            target=self._run_thread,
+            daemon=True,
+        )
+        self.runing_thread.start()
 
     def _save_final_files(self, stoped=False):
         replace_by = "_stoped" if stoped else ""
@@ -541,37 +546,56 @@ class App(QMainWindow):
         return dict
 
     def next_target(self):
-        self.target_idx += 1
-        self.brainsight.set_target(self.targets[self.target_idx])
+        if not self.targets:
+            return
+
+        if self.target_idx < len(self.targets) - 1:
+            self.target_idx += 1
+            self.brainsight.set_target(name=self.targets[self.target_idx])
 
     def prev_target(self):
-        self.target_idx -= 1
-        self.brainsight.set_target(self.targets[self.target_idx])
+        if not self.targets:
+            return
 
-    def stop(self, final=False):
-        self.is_running = False
+        if self.target_idx > 0:
+            self.target_idx -= 1
+            self.brainsight.set_target(name=self.targets[self.target_idx])
+
+    def stop(self):
+        self.stop_event.set()
+        # Wake workers blocked on events.
+        if hasattr(self, "sample_event"):
+            self.sample_event.set()
+        self.new_file_event.set()
+
+        current_thread = threading.current_thread()
+
+        for thread in (self.runing_thread, self._new_file_thread):
+            if thread is not None and thread is not current_thread:
+                thread.join(timeout=2)
+
+        self.runing_thread = None
+        self._new_file_thread = None
+
         self.run_button.setEnabled(True)
         self.next_target_button.setEnabled(False)
         self.prev_target_button.setEnabled(False)
-        # self.quit_button.setEnabled(True)
-        # stop thread if it is started
-        if self.runing_thread is not None:
-            self.runing_thread.join()
-        if self._new_file_thread:
-            self._new_file_thread.join()
-        self.runing_thread = None
-        if not final:
-            self.run()
 
     def quit(self):
         self.timer.stop()
-        if self.is_running:
-            self.is_running = False
-            self.sample_event.set()
-            self.new_file_event.set()
-            self.stop(final=True)
-            self.brainsight.stop()
+
+        if self.runing_thread is not None:
+            self.stop()
+
+        if self.brainsight is not None:
+            try:
+                self.brainsight.stop()
+            except Exception as e:
+                self.print_log(f"ERROR stopping Brainsight: {e}")
+
         if self.save_directory_base is not None:
-            if os.path.exists(os.path.join(self.save_directory_base, "_data_tmp")):
-                shutil.rmtree(os.path.join(self.save_directory_base, "_data_tmp"), ignore_errors=True)
+            temp_dir = os.path.join(self.save_directory_base, "_data_tmp")
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
         self.close()

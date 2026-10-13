@@ -117,7 +117,6 @@ class MapOptions(QDialog):
     def save_file(self, file_path):
         options_dict = self.to_dict()
         # write dict in yaml format to file
-
         try:
             with open(file_path, "w") as f:
                 yaml.dump(options_dict, f, default_flow_style=False, allow_unicode=True)
