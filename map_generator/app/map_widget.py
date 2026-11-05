@@ -174,30 +174,34 @@ class MapWindow(QMainWindow):
             self.load_files(files, metadata_files)
 
     def load_files(self, file_names=None, metadata_files=None):
-        self.file_initialized = False
-        if file_names is None or file_names is False:
-            file_names, _ = QFileDialog.getOpenFileNames(self, "Select files", "", "Map generator files (*.pkl)")
-        if file_names:
-            # self.files = file_names
-            self.map_instance += 1
-            self.current_map_index = self.map_instance
-            state = self.check_files(file_names)
-            if metadata_files is not None:
-                self.apply_metadata(metadata_files)
-            if not state:
-                self.parent.log_queue.put_nowait("Error in loading files. Please check the files.")
-                return
-            self.generate_map_button.setEnabled(True)
-            self.map_options_button.setEnabled(True)
-            self.save_map_button.setEnabled(True)
-            exclusions = self.current_map.exclusions
-            tmslyzer = self.current_map.TMSLyzer_data
-            self.table_widget.set_files(file_names, exclusions, tmslyzer)
-            self.file_initialized = True
-            if len(self.maps) > 1:
-                self.prev_button.setEnabled(True)
-                self.next_button.setEnabled(True)
-            self._generate_map()
+        try:
+            self.file_initialized = False
+            if file_names is None or file_names is False:
+                file_names, _ = QFileDialog.getOpenFileNames(self, "Select files", "", "Map generator files (*.pkl)")
+            if file_names:
+                # self.files = file_names
+                self.map_instance += 1
+                self.current_map_index = self.map_instance
+                state = self.check_files(file_names)
+                if metadata_files is not None:
+                    self.apply_metadata(metadata_files)
+                if not state:
+                    self.parent.log_queue.put_nowait("Error in loading files. Please check the files.")
+                    return
+                self.generate_map_button.setEnabled(True)
+                self.map_options_button.setEnabled(True)
+                self.save_map_button.setEnabled(True)
+                exclusions = self.current_map.exclusions
+                tmslyzer = self.current_map.TMSLyzer_data
+                self.table_widget.set_files(file_names, exclusions, tmslyzer)
+                self.file_initialized = True
+                if len(self.maps) > 1:
+                    self.prev_button.setEnabled(True)
+                    self.next_button.setEnabled(True)
+                self._generate_map()
+        except Exception as e:
+            self.parent.log_queue.put_nowait(f"Error in loading files: {repr(e)}")
+            return
 
     def update_muscle(self, index):
         if not self.file_initialized:
@@ -272,15 +276,18 @@ class MapWindow(QMainWindow):
         return self.current_map.files if self.current_map else []
 
     def _update_plot(self):
-        if not self.file_initialized:
-            return
-        if self.current_map.generator.map_characteristics is None:
-            self._generate_map()
-        self.ax.clear()
-        exclusions = self.current_map.exclusions
-        self.table_widget.set_files(self.files, exclusions)
-        self.current_map.plot(ax=self.ax, show_projection=self.show_projection)
-        self._show_map()
+        try:
+            if not self.file_initialized:
+                return
+            if self.current_map.generator.map_characteristics is None:
+                self._generate_map()
+            self.ax.clear()
+            exclusions = self.current_map.exclusions
+            self.table_widget.set_files(self.files, exclusions)
+            self.current_map.plot(ax=self.ax, show_projection=self.show_projection)
+            self._show_map()
+        except Exception as e:
+            self.parent.log_queue.put_nowait(f"Error in updating plot: {repr(e)}")
 
     def _on_prev(self):
         self.current_map_index -= 1

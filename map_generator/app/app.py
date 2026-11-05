@@ -418,9 +418,12 @@ class App(QMainWindow):
                 self.print_log(f"New data : Sample : {sample.name}, signal file : {last_signal_data}")
                 if "aborted" in last_signal_data:
                     self.print_log(f"TRIAL: Trial aborted, all data  will be deleted.")
+                    self.target_idx = 0
+
                     break
                 elif "finished" in last_signal_data:
                     self.print_log(f"TRIAL: Trial finished, saving data...")
+                    self.target_idx = 0
                     self._save_final_files()
                     break
                 else:
