@@ -837,7 +837,7 @@ class Converter(QDialog):
         df = pd.read_csv(file, sep=sep)
         frames_idxs = []
         samples = []
-        sample_names_short = [s.split(" ")[1] for s in sample_names]
+        sample_names_short = [s.split(" ")[1] if len(s.split(" ")) > 1 else s for s in sample_names]
         for frame, sample in zip(df["frames"], df["samples"]):
             if str(sample) in sample_names_short and frame in frames:
                 samples.append(sample_names_short.index(str(sample)))
